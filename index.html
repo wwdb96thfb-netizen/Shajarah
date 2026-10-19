@@ -146,6 +146,12 @@ input,textarea,select{font-size:16px!important}
 .menu button{border:0!important;background:none!important;text-align:left;padding:12px 14px!important;border-radius:8px!important;font-weight:600;color:var(--fg)!important}
 .menu button.on{background:var(--accent-soft)!important}
 .menu button.has{color:#7a5410!important}
+.linkbtn{font:inherit;font-weight:700;padding:11px 12px;border-radius:10px;border:1.5px solid var(--pro)!important;background:var(--key-bg)!important;color:var(--fg)!important;text-align:left}
+.pathbox{border:2px solid var(--pro)}
+.chain{margin:0;padding:0 22px 0 0;direction:rtl;font-family:var(--ur);font-size:1.05rem;line-height:2.1;max-height:40vh;overflow:auto}
+.chain li{cursor:pointer}.chain li::marker{font-family:var(--ui);font-size:.75rem;color:var(--muted)}
+.edge.me{stroke:var(--pro);stroke-width:3.4}
+.node.me rect{stroke:var(--pro);stroke-width:3}
 .phead{display:flex;align-items:center;justify-content:space-between}
 .pill{flex:none}
 .app{height:100%}
@@ -240,8 +246,7 @@ body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
     <button type="button" class="ib" id="menuBtn" aria-label="Menu" aria-expanded="false"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><i class="dot" id="menuDot" hidden></i></button>
     <div class="search" id="searchBox" hidden><input id="q" type="search" placeholder="نام تلاش کریں / search a name" aria-label="Search a name"><div class="results" id="res" hidden></div></div>
     <div class="menu" id="menu" hidden>
-      <button type="button" id="vStart" class="on">From Jalalia</button>
-      <button type="button" id="vAll">Full lineage (from Hazrat Adam)</button>
+      <button type="button" id="goProphet">Go to Hazrat Muhammad ﷺ</button>
       <button type="button" id="pendList" hidden>New entries</button>
       <button type="button" id="sugList" hidden>Suggestions</button>
       <button type="button" id="usersBtn" hidden>People &amp; links</button>
@@ -264,6 +269,12 @@ body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
         <div class="phead"><h2>Selected</h2><button type="button" class="ib" id="closeSel" aria-label="Close">✕</button></div>
         <div class="who" id="who"></div>
         <div class="meta" id="rel"></div>
+        <button type="button" class="linkbtn" id="pathBtn">🌿 Show his connection to Hazrat Muhammad ﷺ</button>
+        <section class="box pathbox" id="secPath" hidden>
+          <h3 id="pathTitle"></h3>
+          <ol class="chain" id="pathList"></ol>
+          <div class="row"><button type="button" id="pathClear">Hide connection</button></div>
+        </section>
         <section class="box addbox" id="secAdd">
           <h3>Add a child under <span class="ur" id="addTo"></span></h3>
           <input id="fSon" type="text" dir="auto" placeholder="Name — Urdu or English" aria-label="Child's name">
@@ -305,7 +316,6 @@ body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
           </div>
         </div>
         <div class="row">
-          <button type="button" id="focusBtn">Show his family only</button>
           <button type="button" id="delBtn" class="danger">Delete</button>
         </div>
         <div class="msg" id="msg" aria-live="polite"></div>
@@ -342,7 +352,7 @@ let DATA=load('tree');                   // the last tree received from the serv
 let OUT=load('out')||[];                 // changes made on this phone that the server has not received yet
 let PIN=null, server=null, syncing=false, finding=null, ME=DATA&&DATA.me||null;
 let P={}, settings={}, canWrite=false, canAdd=false, sugKind='name';
-let viewRoot=null, viewMode='start', sel=null, picking=null, delArm=false, sugPicking=null, sugFather=null;
+let viewRoot=null, viewMode='all', PATH=new Set(), PROPHET='p0044', sel=null, picking=null, delArm=false, sugPicking=null, sugFather=null;
 let pos={}, T={x:0,y:0,k:1}, first=true;
 const sampler=null;
 const BH=50, GAP=10, LEVEL=40, PAD=14;
@@ -402,9 +412,9 @@ function applyLocal(base){const M={};for(const k in base)M[k]=Object.assign({},b
     else if((o.op==='reject'||o.op==='delete')&&x)delete M[o.id]});
   return M}
 function rebuild(){P=applyLocal(DATA?DATA.people:{});settings={start:DATA&&DATA.start||'p0084'};pill();
-  if(!Object.keys(P).length)return;$('#empty').hidden=true;if(viewMode==='start')viewRoot=settings.start;draw();if(first){first=false;firstView()}
+  if(!Object.keys(P).length)return;$('#empty').hidden=true;viewRoot=null;draw();if(first){first=false;firstView()}
   if(sel&&P[sel])select(sel);else if(sel)select(null);if(canWrite)pendCount()}
-function firstView(){const r=viewRoot||settings.start;if(innerWidth<760&&pos[r])centerOn(r,0.8);else fit()}
+function firstView(){if(pos[PROPHET])centerOn(PROPHET,0.8);else fit()}
 function setData(j){DATA={ver:j.ver,people:j.people,start:j.start,me:j.me,suggestions:j.suggestions||[]};keep('tree',DATA);setMe(j.me)}
 function setMe(me){ME=me;canWrite=!!(me&&me.owner);canAdd=canWrite||(me&&me.role==='family');document.body.classList.toggle('ro',!canWrite);
   ['pendList','sugList','usersBtn','histBtn'].forEach(b=>$('#'+b).hidden=!canWrite);$('#pEmptyAdd').hidden=!canAdd;watermark()}
@@ -474,6 +484,17 @@ $('#menu').addEventListener('click',e=>{if(e.target.closest('button'))menuOpen(f
 document.addEventListener('pointerdown',e=>{if(!e.target.closest('#menu,#menuBtn'))menuOpen(false);if(!e.target.closest('#searchBox,#searchBtn'))$('#searchBox').hidden=true});
 $('#searchBtn').onclick=e=>{e.stopPropagation();menuOpen(false);const b=$('#searchBox');b.hidden=!b.hidden;if(!b.hidden)setTimeout(()=>$('#q').focus(),30)};
 $('#closeSel').onclick=()=>select(null);
+// ---- connection of any person to Hazrat Muhammad ﷺ: highlighted in gold in the tree and listed generation by generation
+let pathFor=null;
+function pathTo(id){const L=[];let c=id,g=0;while(c&&P[c]&&g++<600){L.push(c);if(c===PROPHET)return L;c=P[c].parent}return null}
+$('#pathBtn').onclick=()=>{if(!sel)return;pathFor=sel;const L=pathTo(sel);
+  if(!L){$('#secPath').hidden=false;$('#pathTitle').textContent='No connection to Hazrat Muhammad ﷺ is recorded for this name.';$('#pathList').innerHTML='';return}
+  PATH=new Set(L);draw();
+  $('#pathTitle').textContent=L.length>1?(L.length-1)+' generations from Hazrat Muhammad ﷺ':'Hazrat Muhammad ﷺ';
+  $('#pathList').innerHTML=L.slice().reverse().map(k=>`<li data-id="${esc(k)}">${esc(label(P[k])||'—')}</li>`).join('');$('#secPath').hidden=false;
+  $('#pathBtn').hidden=true;centerOn(PROPHET,Math.min(T.k,0.6))};
+$('#pathList').addEventListener('click',e=>{const li=e.target.closest('li');if(li&&pos[li.dataset.id])centerOn(li.dataset.id,Math.max(T.k,0.7))});
+$('#pathClear').onclick=()=>{pathFor=null;PATH=new Set();draw();$('#secPath').hidden=true;$('#pathBtn').hidden=false};
 // ---- only the tree zooms; the app itself never zooms
 ['gesturestart','gesturechange','gestureend'].forEach(t=>document.addEventListener(t,e=>e.preventDefault(),{passive:false}));
 document.addEventListener('touchmove',e=>{if(e.touches.length>1&&!e.target.closest('#cv'))e.preventDefault()},{passive:false});
@@ -490,7 +511,7 @@ function runFrom(id){const a=[id];let g=0;while(g++<600){const k=kids(a[a.length
 function layout(){
   pos={};chainEdges=[];const BW={};
   const roots=viewRoot&&P[viewRoot]?[viewRoot]:topRoots();
-  const meSet=settings.me?ancestors(settings.me):new Set();
+  const meSet=PATH;
   const bw=id=>{const p=P[id];return Math.max(64,tw(label(p)||'—',!!p.star,p.star==='p'?23:19)+2*PAD+(p.star==='p'?12:0),p.note?tw(p.note,false)*0.6+30:0)};
   const bh=id=>BH+(P[id].note?18:0);
   // Each subtree is built in its own coordinates (root centre = x 0, top = y 0) with an outline of
@@ -591,8 +612,8 @@ function zoomAt(f,cx,cy){const nk=Math.min(4,Math.max(0.02,T.k*f));T.x=cx-(cx-T.
 // pan / zoom / tap
 const ptrs=new Map();let downAt=null,moved=false,pinch=null;
 cvEl.addEventListener('pointerdown',e=>{if(e.target.closest('.zoom,.banner,.hint'))return;cvEl.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
-  downAt={x:e.clientX,y:e.clientY,tx:T.x,ty:T.y,t:e.target};moved=false;
-  if(ptrs.size===2){const [a,b]=[...ptrs.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),k:T.k,tx:T.x,ty:T.y,cx:(a.x+b.x)/2,cy:(a.y+b.y)/2}}});
+  if(ptrs.size===1){downAt={x:e.clientX,y:e.clientY,tx:T.x,ty:T.y,t:e.target};moved=false}
+  if(ptrs.size===2){moved=true;const [a,b]=[...ptrs.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),k:T.k,tx:T.x,ty:T.y,cx:(a.x+b.x)/2,cy:(a.y+b.y)/2}}});
 cvEl.addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId))return;ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
   const r=cvEl.getBoundingClientRect();
   if(ptrs.size===2&&pinch){const [a,b]=[...ptrs.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);const nk=Math.min(4,Math.max(0.02,pinch.k*d/pinch.d));
@@ -600,6 +621,7 @@ cvEl.addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId))return;ptrs.se
   if(!downAt)return;const dx=e.clientX-downAt.x,dy=e.clientY-downAt.y;if(Math.abs(dx)+Math.abs(dy)>6){moved=true;cvEl.classList.add('drag')}
   if(moved){T.x=downAt.tx+dx;T.y=downAt.ty+dy;apply()}});
 function up(e){const wasTap=ptrs.size===1&&!moved&&downAt;ptrs.delete(e.pointerId);if(ptrs.size<2)pinch=null;cvEl.classList.remove('drag');
+  if(ptrs.size===1){const [q]=[...ptrs.values()];downAt={x:q.x,y:q.y,tx:T.x,ty:T.y,t:null};moved=true}
   if(wasTap){const n=downAt.t.closest&&downAt.t.closest('.node');if(n)tapNode(n.dataset.id);else if(!picking)select(null)}
   if(!ptrs.size)downAt=null}
 cvEl.addEventListener('pointerup',up);cvEl.addEventListener('pointercancel',up);
@@ -629,6 +651,7 @@ function select(id){sel=id;delArm=false;$('#delBtn').textContent='Delete';msg(''
     $('#secPend').hidden=!pend;$('#pendOwner').hidden=!canWrite;
     $('#pendBy').textContent=own?'You added this name. You can correct it above until Iftikhar approves it.':'Added by '+(p.by||'a family member')+'.';
     $('#delBtn').hidden=!(canWrite&&!pend);$('#delBtn').disabled=hasKids;$('#delBtn').title=hasKids?'Remove or move the children first':'';
+    if(id!==pathFor){$('#secPath').hidden=true;$('#pathBtn').hidden=id===PROPHET}
     if(!sugPicking&&sugFather&&$('#sugPicked').dataset.for!==id){sugFather=null;$('#sugPicked').textContent=''}$('#sugPicked').dataset.for=id;
     $('#hidNote').hidden=!p.hid;$('#hidNote').textContent=p.hid===1?'Hidden from family (only you see this name).':p.hid===2?'Hidden from family because a parent above is hidden.':'';
     $('#visShow').classList.toggle('on',canWrite&&!p.hid);$('#visHide').classList.toggle('on',canWrite&&p.hid===1);
@@ -678,10 +701,8 @@ $('#rejBtn').onclick=()=>{if(!sel||!P[sel].pend)return;if(kids(sel).length){msg(
 $('#suggestBtn').onclick=()=>{const m=$('#suggestMsg'),text=$('#sugText').value.trim(),fa=sugKind==='father'?sugFather:null;
   if(!text&&!fa){m.textContent=sugKind==='father'?'Pick the correct father, or write his name.':'Write your suggestion first.';return}
   queue({op:'suggest',sid:rid('s'),person:sel,kind:sugKind,text,father:fa||''});$('#sugText').value='';sugFather=null;$('#sugPicked').textContent='';m.textContent=navigator.onLine?'Thank you. Your suggestion was sent to Iftikhar.':'Saved — it will be sent to Iftikhar when you are online.'};
-$('#focusBtn').onclick=()=>{if(!sel)return;viewRoot=sel;viewMode='focus';setModeButtons();draw();fit()};
-function setModeButtons(){$('#vStart').classList.toggle('on',viewMode==='start');$('#vAll').classList.toggle('on',viewMode==='all')}
-$('#vStart').onclick=()=>{viewMode='start';viewRoot=settings.start||null;setModeButtons();draw();fit()};
-$('#vAll').onclick=()=>{viewMode='all';viewRoot=null;setModeButtons();draw();fit()};
+function setModeButtons(){}
+$('#goProphet').onclick=()=>{if(pos[PROPHET])centerOn(PROPHET,0.8)};
 // search
 $('#q').addEventListener('input',()=>{const q=$('#q').value.trim();const box=$('#res');
   if(!q){box.hidden=true;return}

@@ -7,7 +7,7 @@
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto'), os = require('os');
 const { spawn } = require('child_process');
 
-const VERSION = 2;
+const VERSION = 3;
 const ROOT = __dirname, DATA = path.join(ROOT, 'data'), BACK = path.join(DATA, 'backups');
 const CFG = path.join(DATA, 'config.json'), TREE = path.join(DATA, 'tree.json'), HIST = path.join(DATA, 'history.jsonl');
 const APP_URL = process.env.SJ_APP_URL || 'https://wwdb96thfb-netizen.github.io/Shajarah/';
@@ -26,6 +26,8 @@ let cfg;
 try { cfg = JSON.parse(fs.readFileSync(CFG, 'utf8')); } catch (e) { cfg = { topic: 'sj' + rnd(22), ownerCode: rnd(16), people: [] }; }
 if (!cfg.devs) cfg.devs = {};
 if (!cfg.urdu) cfg.urdu = {};
+if (!Array.isArray(cfg.subs)) cfg.subs = [];
+if (!cfg.vapid) { const k = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' }), j = k.publicKey.export({ format: 'jwk' }); cfg.vapid = { priv: k.privateKey.export({ format: 'jwk' }), pub: Buffer.concat([Buffer.from([4]), Buffer.from(j.x, 'base64url'), Buffer.from(j.y, 'base64url')]).toString('base64url') }; }
 const saveCfg = () => writeJSON(CFG, cfg);
 saveCfg();
 
@@ -112,6 +114,28 @@ async function toUrduAll(names) {
   return names.map(n => n.split(' ').map(w => { if (!hasLatin(w)) return w; const k = keyOf(w); return DICT[k] || cfg.urdu[k] || w; }).join(' '));
 }
 
+// ---- phone notifications for the owner (standard Web Push, encrypted for his phone only)
+const PUSH_HOSTS = /(^|\.)(fcm\.googleapis\.com|push\.apple\.com|notify\.windows\.com|push\.services\.mozilla\.com)$/;
+const hm = (k, d) => crypto.createHmac('sha256', k).update(d).digest();
+function pushBody(sub, text) {
+  const ua = Buffer.from(sub.p256dh, 'base64url'), auth = Buffer.from(sub.auth, 'base64url'), e = crypto.createECDH('prime256v1'), as = e.generateKeys(), salt = crypto.randomBytes(16);
+  const ikm = hm(hm(auth, e.computeSecret(ua)), Buffer.concat([Buffer.from('WebPush: info\0'), ua, as, Buffer.from([1])]));
+  const prk = hm(salt, ikm), cek = hm(prk, 'Content-Encoding: aes128gcm\0\x01').subarray(0, 16), nonce = hm(prk, 'Content-Encoding: nonce\0\x01').subarray(0, 12);
+  const c = crypto.createCipheriv('aes-128-gcm', cek, nonce), ct = Buffer.concat([c.update(Buffer.concat([Buffer.from(text), Buffer.from([2])])), c.final(), c.getAuthTag()]);
+  const head = Buffer.alloc(21); salt.copy(head); head.writeUInt32BE(4096, 16); head[20] = 65;
+  return Buffer.concat([head, as, ct]);
+}
+function vapidAuth(endpoint) {
+  const b = o => Buffer.from(JSON.stringify(o)).toString('base64url'), data = b({ typ: 'JWT', alg: 'ES256' }) + '.' + b({ aud: new URL(endpoint).origin, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: APP_URL });
+  const sig = crypto.sign('sha256', Buffer.from(data), { key: crypto.createPrivateKey({ key: cfg.vapid.priv, format: 'jwk' }), dsaEncoding: 'ieee-p1363' }).toString('base64url');
+  return 'vapid t=' + data + '.' + sig + ', k=' + cfg.vapid.pub;
+}
+async function pushTo(sub, msg) {
+  try { const r = await fetch(sub.endpoint, { method: 'POST', headers: { 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream', TTL: '86400', Urgency: 'high', Authorization: vapidAuth(sub.endpoint) }, body: pushBody(sub, JSON.stringify(msg)), signal: AbortSignal.timeout(15000) });
+    if (r.status === 404 || r.status === 410) { cfg.subs = cfg.subs.filter(x => x.endpoint !== sub.endpoint); saveCfg(); } return r.status; } catch (e) { return 0; }
+}
+async function notifyOwner(msg) { for (const x of cfg.subs.filter(y => y.who === idOf(cfg.ownerCode))) await pushTo(x, msg); }
+
 // ---- changes sent by phones (each one once, even if the phone sends it again)
 const ID = /^[a-z0-9]{6,32}$/;
 async function applyOps(user, ops) {
@@ -127,6 +151,15 @@ async function applyOps(user, ops) {
     catch (e) { out.push({ error: String(e.message || e) }); }
   }
   if (changed) saveTree();
+  if (!user.owner) {
+    const added = ops.filter((o, i) => o && o.op === 'add' && out[i] && out[i].ok && out[i].fresh), sug = ops.filter((o, i) => o && o.op === 'suggest' && out[i] && out[i].fresh);
+    if (added.length || sug.length) {
+      const names = added.map((o, i) => tree.people[o.id] && tree.people[o.id].name).filter(Boolean);
+      const body = (added.length ? user.name + ' added ' + (added.length === 1 ? names[0] : added.length + ' names: ' + names.slice(0, 4).join('، ') + (names.length > 4 ? '…' : '')) : '') +
+        (sug.length ? (added.length ? ' and sent ' : user.name + ' sent ') + (sug.length === 1 ? 'a suggestion' : sug.length + ' suggestions') : '') + '. Tap to review.';
+      notifyOwner({ title: added.length ? 'Shajarah: new names to approve' : 'Shajarah: new suggestion', body, go: added.length ? 'pend' : 'sug' });
+    }
+  }
   return out;
 }
 function applyOne(user, o, urdu) {
@@ -145,7 +178,7 @@ function applyOne(user, o, urdu) {
       status: owner ? 'approved' : 'pending', added_by: user.name, added_code: idOf(user.code), added_at: new Date().toISOString(), typed };
     history(user.name, 'added ' + (o.g === 'f' ? 'daughter' : 'son'), o.id, '', P[o.id].name + ' (under ' + nameOf(o.parent) + ')');
     log(user.name, 'added', P[o.id].name, 'under', nameOf(o.parent), owner ? '' : '(waiting for approval)');
-    return { changed: true, res: { ok: true, id: o.id, name: P[o.id].name } };
+    return { changed: true, res: { ok: true, id: o.id, name: P[o.id].name, fresh: true } };
   }
   if (o.op === 'edit') {
     const x = P[o.id]; if (!x) throw new Error('This name is no longer in the tree.');
@@ -166,7 +199,7 @@ function applyOne(user, o, urdu) {
     tree.suggestions.push({ sid: o.sid, person: String(o.person || ''), person_name: nameOf(o.person), kind, text, father: fid, father_name: fid ? nameOf(fid) : '', by: user.name, at: new Date().toISOString(), done: false });
     history(user.name, 'suggestion: ' + kind, o.person, nameOf(o.person), text);
     log(user.name, 'sent a suggestion about', nameOf(o.person));
-    return { changed: true };
+    return { changed: true, res: { ok: true, fresh: true } };
   }
   need(owner);   // everything below is the owner's alone
   if (o.op === 'set') {
@@ -281,6 +314,15 @@ async function handle(req, res) {
     return send(res, 200, Object.assign(treeFor(user), { results }));
   }
   if (!user.owner) return send(res, 403, { error: 'owner' });
+  if (p[1] === 'pushkey' && req.method === 'GET') return send(res, 200, { ok: true, key: cfg.vapid.pub });
+  if (p[1] === 'push' && req.method === 'POST') {
+    const b = await body(req), x = b.sub || {}, k = x.keys || {}; let host = ''; try { const e = new URL(x.endpoint); if (e.protocol === 'https:') host = e.hostname; } catch (e) {}
+    if (!PUSH_HOSTS.test(host) || !/^[\w-]{80,100}$/.test(k.p256dh || '') || !/^[\w-]{16,30}$/.test(k.auth || '')) return send(res, 400, { error: 'form' });
+    cfg.subs = cfg.subs.filter(y => y.endpoint !== x.endpoint); cfg.subs.push({ who: idOf(user.code), endpoint: String(x.endpoint).slice(0, 600), p256dh: k.p256dh, auth: k.auth, at: new Date().toISOString() });
+    if (cfg.subs.length > 20) cfg.subs.shift(); saveCfg(); log('Owner turned on notifications');
+    if (b.test) await pushTo(cfg.subs[cfg.subs.length - 1], { title: 'Shajarah notifications are on', body: 'You will be told here when the family adds new names or sends a suggestion.', go: 'pend' });
+    return send(res, 200, { ok: true });
+  }
   if (p[1] === 'people' && req.method === 'GET') {
     return send(res, 200, { ok: true, people: cfg.people.map(x => ({ code: x.code, name: x.name, role: x.role, cancelled: !!x.cancelled, opened: !!cfg.devs[idOf(x.code)], expired: !cfg.devs[idOf(x.code)] && Date.now() - Date.parse(x.linkAt || x.added || 0) > LINK_DAYS * 864e5, seen: (cfg.devs[idOf(x.code)] || {}).seen || '', link: link(x.code) })) });
   }
@@ -323,7 +365,7 @@ async function selfUpdate() {
     log('Updated the server. Restarting.'); process.exit(0);
   } catch (e) {}
 }
-setInterval(selfUpdate, 10 * 60e3); setTimeout(selfUpdate, 60e3);
+setInterval(selfUpdate, 3 * 60e3); setTimeout(selfUpdate, 30e3);
 
 // ---- public address: Cloudflare quick tunnel, announced on a private ntfy topic so phones can find it
 let publicUrl = '', tunnelProc = null;

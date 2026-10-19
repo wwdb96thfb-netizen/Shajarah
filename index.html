@@ -251,6 +251,7 @@ body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
       <button type="button" id="sugList" hidden>Suggestions</button>
       <button type="button" id="usersBtn" hidden>People &amp; links</button>
       <button type="button" id="histBtn" hidden>History</button>
+      <button type="button" id="pushBtn" hidden>🔔 Turn on notifications</button>
     </div>
   </div>
   <div class="instbar" id="instBar" hidden><span>Put Shajarah on your home screen</span><button type="button" id="instGo">Install</button></div>
@@ -417,7 +418,7 @@ function rebuild(){P=applyLocal(DATA?DATA.people:{});settings={start:DATA&&DATA.
 function firstView(){if(pos[PROPHET])centerOn(PROPHET,0.8);else fit()}
 function setData(j){DATA={ver:j.ver,people:j.people,start:j.start,me:j.me,suggestions:j.suggestions||[]};keep('tree',DATA);setMe(j.me)}
 function setMe(me){ME=me;canWrite=!!(me&&me.owner);canAdd=canWrite||(me&&me.role==='family');document.body.classList.toggle('ro',!canWrite);
-  ['pendList','sugList','usersBtn','histBtn'].forEach(b=>$('#'+b).hidden=!canWrite);$('#pEmptyAdd').hidden=!canAdd;watermark()}
+  ['pendList','sugList','usersBtn','histBtn'].forEach(b=>$('#'+b).hidden=!canWrite);drawPush();$('#pEmptyAdd').hidden=!canAdd;watermark()}
 async function sync(){if(syncing||!cfg.c||(ME&&ME.owner&&!PIN))return;syncing=true;pill();
   try{if(OUT.length){const batch=OUT.slice(0,100),j=await api('/api/sync',{method:'POST',body:JSON.stringify({ops:batch})});
       const bad=[];(j.results||[]).forEach((r,i)=>{if(r&&r.error)bad.push(r.error)});
@@ -460,7 +461,7 @@ $('#pinGo').onclick=async()=>{const a=$('#pin1').value.trim(),b=$('#pin2').value
   // offline the PIN is checked against the copy kept on this phone; online the server checks it
   const v=await sha(cfg.c+':'+a),kept=load('pinv');
   if(!navigator.onLine||!(await findServer())){if(kept&&kept===v){PIN=a;showApp();return}E.textContent=kept?'Wrong PIN.':'No connection to the server.';return}
-  PIN=a;E.textContent='Checking…';try{const j=await api('/api/tree?v='+(DATA&&DATA.ver||''));keep('pinv',v);if(!j.same)setData(j);else setMe(j.me);showApp();sync()}catch(e){}};
+  PIN=a;E.textContent='Checking…';try{const j=await api('/api/tree?v='+(DATA&&DATA.ver||''));keep('pinv',v);if(!j.same)setData(j);else setMe(j.me);showApp();await sync();openFromNote();if(Notification&&Notification.permission==='granted'&&!load('push'))enablePush(false)}catch(e){}};
 ['pin1','pin2'].forEach(i=>$('#'+i).addEventListener('keydown',e=>{if(e.key==='Enter')$('#pinGo').click()}));
 // install
 const INSTALLED=!!(navigator.standalone||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches));
@@ -757,6 +758,23 @@ $('#uList').addEventListener('click',async e=>{const s=e.target.closest('[data-s
     showUsers()}catch(err){b.disabled=false;$('#uNew').textContent=err.net?'Needs internet.':'Could not change it.'}});
 $('#uList').addEventListener('focusin',e=>{if(e.target.select)e.target.select()});
 
+// ---- notifications for the owner (new names and suggestions from family)
+const pushOK=()=>'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+function drawPush(){const b=$('#pushBtn');if(!canWrite){b.hidden=true;return}
+  const on=pushOK()&&Notification.permission==='granted'&&!!load('push');b.hidden=on;
+  b.textContent=!pushOK()?'🔔 Notifications: install the app first':Notification.permission==='denied'?'🔔 Notifications are blocked in phone settings':'🔔 Turn on notifications'}
+async function enablePush(test){if(!pushOK()){toast(IOS?'On iPhone: add Shajarah to the Home Screen and open it from there, then try again.':'This browser cannot show notifications. Install the app first.',true);return false}
+  try{if((await Notification.requestPermission())!=='granted'){drawPush();toast('Notifications were not allowed. You can allow them in the phone settings.',true);return false}
+    const k=await api('/api/pushkey'),raw=atob(k.key.replace(/-/g,'+').replace(/_/g,'/')),key=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)key[i]=raw.charCodeAt(i);
+    const reg=await navigator.serviceWorker.ready;let sub=await reg.pushManager.getSubscription();if(sub&&load('push')!==k.key){await sub.unsubscribe();sub=null}
+    if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});
+    await api('/api/push',{method:'POST',body:JSON.stringify({sub:sub.toJSON(),test:!!test})});keep('push',k.key);drawPush();if(test)toast('Notifications are on');return true}
+  catch(e){drawPush();if(!e.stop)toast(e.net?'Needs internet to turn on notifications.':'Notifications could not be turned on.',true);return false}}
+$('#pushBtn').onclick=()=>enablePush(true);
+// opened from a notification: show what is waiting
+function openFromNote(){const g=(location.hash||'').slice(1);if(!g||!canWrite)return;try{history.replaceState(null,'',location.pathname)}catch(e){}
+  if(g==='pend')showPend();else if(g==='sug')showSugs()}
+if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data&&e.data.go){location.hash=e.data.go;sync().then(openFromNote)}});
 // ---- start
 async function start(){
   if(!cfg.c){setupScreen();return}
@@ -764,9 +782,14 @@ async function start(){
   if(DATA){setMe(DATA.me);rebuild()}
   if(DATA&&DATA.me&&DATA.me.owner&&!PIN){askPin('enter');return}
   screen(null);if(!DATA)$('#empty').textContent=navigator.onLine?'Connecting to the Shajarah…':'No internet. Connect once to download the Shajarah.';
-  await sync();if(!DATA&&!$('#app').hidden)$('#empty').textContent='The server could not be reached. It will keep trying.'}
+  await sync();if(!DATA&&!$('#app').hidden)$('#empty').textContent='The server could not be reached. It will keep trying.';openFromNote()}
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});
-  let reloading=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(reloading||!DATA)return;reloading=true;location.reload()})}
+  // a new version of the app is taken automatically; it is applied at once unless someone is typing, then the next time the app is opened
+  let reloading=false,pendingReload=false;const doReload=()=>{if(reloading)return;reloading=true;location.reload()};
+  const busy=()=>document.activeElement&&/INPUT|TEXTAREA/.test(document.activeElement.tagName)&&document.activeElement.value;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!DATA)return;if(busy()||OUT.some(o=>o._typing))pendingReload=true;else doReload()});
+  document.addEventListener('visibilitychange',()=>{if(pendingReload&&document.hidden)doReload()});
+  setInterval(()=>{navigator.serviceWorker.getRegistration().then(r=>r&&r.update()).catch(()=>{})},10*60e3)}
 (async()=>{try{await document.fonts.load('19px "Nastaliq"');await document.fonts.load('700 19px "Nastaliq"')}catch(e){}start()})();
 </script>
 </body></html>

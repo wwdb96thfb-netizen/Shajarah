@@ -200,6 +200,51 @@ body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
   .zoom{bottom:10px}
   .zoom button{width:38px;height:38px}
 }
+/* ---- professional look ---- */
+:root{--brand:#123d2b;--brand2:#0b2a1d;--gold:#c9a24e;--gold2:#e6cb8a}
+.bar{background:linear-gradient(180deg,var(--brand) 0%,var(--brand2) 100%);border-bottom:2px solid var(--gold);color:#f4ead2;box-shadow:0 2px 10px rgb(0 0 0 / .18)}
+.bar h1{color:#f4e3b5;letter-spacing:.2px;text-shadow:0 1px 0 rgb(0 0 0 / .3)}
+.barlogo{width:32px;height:32px;border-radius:8px;box-shadow:0 0 0 1.5px var(--gold)}
+.bar .ib{background:rgb(255 255 255 / .08);border-color:rgb(230 203 138 / .45);color:#f4e3b5}
+.bar .ib:active{background:rgb(255 255 255 / .18)}
+.bar .pill{background:rgb(255 255 255 / .1);color:#f4e3b5;border-color:rgb(230 203 138 / .55);font-weight:600}
+.bar .pill.ok{color:#c8f0d3;border-color:#6fb98c}
+.bar .pill.wait{background:var(--gold);color:#1d1606;border-color:var(--gold)}
+.bar .pill.off{color:#ffc2b4;border-color:#d07a66}
+.canvas{background:radial-gradient(ellipse at 50% 0%,#fffdf6 0%,var(--paper) 60%,#f1ecdf 100%)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .canvas{background:var(--paper)}}
+.node rect{filter:drop-shadow(0 1px 1.5px rgb(0 0 0 / .12))}
+.panel{background:var(--bg)}
+.panel h2{font-size:.72rem;letter-spacing:.12em;color:var(--gold)}
+.box{border-radius:14px;box-shadow:0 1px 3px rgb(0 0 0 / .06);border-color:var(--rule)}
+.addbox{border:1.5px solid var(--accent);background:linear-gradient(180deg,var(--accent-soft),var(--card) 40%)}
+.panel button{border-radius:10px}
+.panel button.primary,.panel .big2 .son,.panel .big2 .dau{background:linear-gradient(180deg,#2f6b4e,#22513a);border-color:#1d4632;box-shadow:0 2px 6px rgb(34 81 58 / .3)}
+.u{font-family:var(--ur);font-size:1.08em;line-height:2.2;display:block;padding-bottom:2px}
+.en{display:block;font-family:var(--ui);font-size:.7rem;font-weight:500;opacity:.72;line-height:1.3;margin-top:3px}
+.uh{display:flex;flex-direction:column;align-items:flex-end;text-align:right}
+.uh .who2{font-size:1.15rem;margin-top:2px}
+.urm{font-family:var(--ur);direction:rtl;text-align:right;line-height:2;font-size:.95rem}
+.urm .en,.urm small{direction:ltr;text-align:left}
+.panel .big2 button{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 8px 9px}
+.panel .big2 .u{font-size:1.25rem}
+.kinds button{flex:1 1 30%;display:flex;flex-direction:column;align-items:center}
+.linkbtn{display:flex;flex-direction:column;align-items:flex-end;text-align:right}
+#pathClear,#suggestBtn,#sugPickBtn,#saveBtn{display:flex;flex-direction:column;align-items:center}
+#sugLbl{font-family:var(--ur);direction:rtl;text-align:right}
+#pEmpty{text-align:right}
+#pEmpty .en{text-align:left}
+.saw{font-family:var(--ui);font-size:.85em;line-height:1}
+.about{display:flex;gap:10px;align-items:center;margin:6px 4px 2px;padding:10px;border-top:1px solid var(--rule)}
+.about img{width:40px;height:40px;border-radius:9px;box-shadow:0 0 0 1px var(--gold)}
+.about b{display:block;font-family:var(--ur);font-size:1.1rem;line-height:1.9;color:var(--fg)}
+.about span{display:block;font-size:.72rem;color:var(--muted);line-height:1.5}
+.about .cr{font-size:.66rem}
+.menu{border-radius:14px;border-color:var(--gold2)}
+@media (max-width:760px){
+  .panel{border-top:0;border-radius:18px 18px 0 0;box-shadow:0 -8px 24px rgb(0 0 0 / .14);position:relative}
+  .panel::before{content:"";position:absolute;top:6px;left:50%;width:42px;height:4px;margin-left:-21px;border-radius:2px;background:var(--rule)}
+}
 @media print{body.ro *{display:none!important}body.ro::after{content:"Printing the Shajarah is not allowed.";display:block;padding:40px;font:20px sans-serif}}
 </style>
 </head><body class="ro">
@@ -259,7 +304,7 @@ body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
       <button type="button" id="histBtn" hidden>History</button>
       <button type="button" id="pushBtn" hidden>🔔 Turn on notifications</button>
       <button type="button" id="updBtn">⟳ Update app</button>
-      <div class="meta" id="verTxt" style="padding:4px 14px 8px"></div>
+      <div class="about"><img src="icon-192.png" alt=""><div><b>شجرۃ الطیبہ</b><span id="verTxt"></span><span class="cr">© 2026 Syed Iftikhar Shah · Private family record</span></div></div>
     </div>
   </div>
   <div class="instbar" id="instBar" hidden><span>Put Shajarah on your home screen</span><button type="button" id="instGo">Install</button></div>
@@ -273,23 +318,23 @@ body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
       <svg class="wm" id="wm" aria-hidden="true" hidden><defs><pattern id="wmp" width="360" height="200" patternUnits="userSpaceOnUse" patternTransform="rotate(-25)"><text id="wmt" x="10" y="100"></text></pattern></defs><rect width="100%" height="100%" fill="url(#wmp)"/></svg>
     </div>
     <aside class="panel" id="panel">
-      <div id="pEmpty" class="meta"><b>Tap any name</b> to see his family<span id="pEmptyAdd">, add his sons and daughters</span>, or to tell Iftikhar if something is wrong. <span class="wide">Names with a dotted border are new entries waiting for approval.</span></div>
+      <div id="pEmpty" class="meta"><span class="urm">کسی بھی نام پر ٹیپ کریں — خاندان دیکھیں<span id="pEmptyAdd">، نئی اولاد درج کریں</span> یا غلطی کی نشاندہی کریں۔</span><small class="en">Tap any name to see the family<span class="wide">, add children or report a mistake</span>.</small></div>
       <div id="pBody" hidden style="display:flex;flex-direction:column;gap:12px">
         <div class="phead"><h2>Selected</h2><button type="button" class="ib" id="closeSel" aria-label="Close">✕</button></div>
         <div class="who" id="who"></div>
         <div class="meta" id="rel"></div>
-        <button type="button" class="linkbtn" id="pathBtn">🌿 Show his connection to Hazrat Muhammad ﷺ</button>
+        <button type="button" class="linkbtn" id="pathBtn"><span class="u">🌿 حضرت محمد ﷺ سے نسبی تعلق دیکھیں</span><small class="en">Show his connection to Hazrat Muhammad ﷺ</small></button>
         <section class="box pathbox" id="secPath" hidden>
           <h3 id="pathTitle"></h3>
           <ol class="chain" id="pathList"></ol>
-          <div class="row"><button type="button" id="pathClear">Hide connection</button></div>
+          <div class="row"><button type="button" id="pathClear"><span class="u">تعلق چھپائیں</span><small class="en">Hide connection</small></button></div>
         </section>
         <section class="box addbox" id="secAdd">
-          <h3>Add a child under <span class="ur" id="addTo"></span></h3>
-          <input id="fSon" type="text" dir="auto" placeholder="Name — Urdu or English" aria-label="Child's name">
-          <div class="big2"><button type="button" class="son" id="addSon">+ Son</button><button type="button" class="dau" id="addDau">+ Daughter</button></div>
-          <div class="meta">Names typed in English are changed to Urdu. Works without internet too: it is sent when the phone is online.</div>
-          <div class="meta" id="famAddNote" hidden>New names show with a dotted border until Iftikhar approves them. You can correct a name you added until then.</div>
+          <h3 class="uh"><span class="u">نئی اولاد کا اندراج</span><small class="en">Add a child under</small> <span class="ur who2" id="addTo"></span></h3>
+          <input id="fSon" type="text" dir="auto" placeholder="بچے کا نام لکھیں — اردو یا انگریزی" aria-label="Child's name">
+          <div class="big2"><button type="button" class="son" id="addSon"><span class="u">+ بیٹا</span><small class="en">Son</small></button><button type="button" class="dau" id="addDau"><span class="u">+ بیٹی</span><small class="en">Daughter</small></button></div>
+          <div class="meta urm">نام لکھیں اور «بیٹا» یا «بیٹی» دبائیں۔ انگریزی میں لکھا نام خود اردو میں بدل جائے گا۔ انٹرنیٹ نہ ہو تب بھی محفوظ ہو جائے گا اور بعد میں بھیج دیا جائے گا۔<small class="en">Type the name and tap Son or Daughter. English is changed to Urdu. Works offline too.</small></div>
+          <div class="meta urm" id="famAddNote" hidden>نیا نام منظوری تک نقطوں والے خانے میں نظر آئے گا۔ منظوری سے پہلے آپ اسے درست کر سکتے ہیں۔<small class="en">New names show dotted until approved; you can correct yours until then.</small></div>
         </section>
         <section class="box pendbox" id="secPend" hidden>
           <h3>New entry — waiting for approval</h3>
@@ -304,13 +349,13 @@ body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
           <div class="row"><button type="button" class="primary" id="saveBtn">Save</button></div>
         </section>
         <section class="box suggest" id="secSug">
-          <h3>Is this name or his father wrong?</h3>
-          <div class="meta">Names already in the Shajarah are locked. Tell Iftikhar what is wrong and he will check it.</div>
-          <div class="row" role="radiogroup" aria-label="What is wrong"><button type="button" class="kind on" data-kind="name">Wrong spelling</button><button type="button" class="kind" data-kind="father">Wrong father</button><button type="button" class="kind" data-kind="other">Other</button></div>
-          <div id="sugFatherBox" hidden class="box" style="padding:10px"><div class="meta">Who is his correct father? Tap the button, then tap the correct father in the tree.</div>
-            <button type="button" id="sugPickBtn">Pick the correct father in the tree</button><div class="meta" id="sugPicked"></div></div>
-          <label class="field" id="sugLbl">Correct spelling<textarea id="sugText" aria-label="Your suggestion"></textarea></label>
-          <button type="button" class="primary" id="suggestBtn">Send suggestion</button>
+          <h3 class="uh"><span class="u">کیا یہ نام یا والد غلط ہے؟</span><small class="en">Is this name or his father wrong?</small></h3>
+          <div class="meta urm">شجرہ میں پہلے سے درج نام تبدیل نہیں ہو سکتے۔ غلطی بتائیں، افتخار صاحب جانچ کر درست کر دیں گے۔<small class="en">Existing names are locked. Tell Iftikhar what is wrong.</small></div>
+          <div class="row kinds" role="radiogroup" aria-label="What is wrong"><button type="button" class="kind on" data-kind="name"><span class="u">نام کی غلطی</span><small class="en">Spelling</small></button><button type="button" class="kind" data-kind="father"><span class="u">والد غلط ہے</span><small class="en">Wrong father</small></button><button type="button" class="kind" data-kind="other"><span class="u">کچھ اور</span><small class="en">Other</small></button></div>
+          <div id="sugFatherBox" hidden class="box" style="padding:10px"><div class="meta urm">صحیح والد کون ہیں؟ نیچے بٹن دبائیں، پھر درخت میں صحیح والد کے نام پر ٹیپ کریں۔<small class="en">Tap the button, then tap the correct father in the tree.</small></div>
+            <button type="button" id="sugPickBtn"><span class="u">درخت میں صحیح والد منتخب کریں</span><small class="en">Pick the correct father</small></button><div class="meta" id="sugPicked"></div></div>
+          <label class="field" id="sugLbl">صحیح نام<textarea id="sugText" aria-label="Your suggestion"></textarea></label>
+          <button type="button" class="primary" id="suggestBtn"><span class="u">تجویز بھیجیں</span><small class="en">Send suggestion</small></button>
           <div class="meta" id="suggestMsg" aria-live="polite"></div>
         </section>
         <div id="secMore" style="display:flex;flex-direction:column;gap:12px"><h2>More</h2>
@@ -498,8 +543,8 @@ $('#copyLink').onclick=async()=>{const L=location.origin+location.pathname+'?t='
 $('#noInstall').onclick=()=>{keep('noinst',1);start()};
 
 // ---- version and manual update
-const APP_VER=12;
-$('#verTxt').textContent='App version '+APP_VER;
+const APP_VER=13, BUILD_DATE='19 Oct 2026';
+$('#verTxt').textContent='Shajarah · Version 1.'+APP_VER+' · '+BUILD_DATE;
 $('#updBtn').onclick=async()=>{toast('Updating…');try{const r=await navigator.serviceWorker.getRegistration();if(r)await r.update()}catch(e){}
   try{const ks=await caches.keys();await Promise.all(ks.filter(k=>k.indexOf('sj-')===0).map(k=>caches.delete(k)))}catch(e){}
   setTimeout(()=>location.reload(),600)};
@@ -514,9 +559,9 @@ $('#closeSel').onclick=()=>select(null);
 let pathFor=null;
 function pathTo(id){const L=[];let c=id,g=0;while(c&&P[c]&&g++<600){L.push(c);if(c===PROPHET)return L;c=P[c].parent}return null}
 $('#pathBtn').onclick=()=>{if(!sel)return;pathFor=sel;const L=pathTo(sel);
-  if(!L){$('#secPath').hidden=false;$('#pathTitle').textContent='No connection to Hazrat Muhammad ﷺ is recorded for this name.';$('#pathList').innerHTML='';return}
+  if(!L){$('#secPath').hidden=false;$('#pathTitle').innerHTML='<span class="u">اس نام کا حضرت محمد ﷺ سے تعلق درج نہیں۔</span>';$('#pathList').innerHTML='';return}
   PATH=new Set(L);draw();
-  $('#pathTitle').textContent=L.length>1?(L.length-1)+' generations from Hazrat Muhammad ﷺ':'Hazrat Muhammad ﷺ';
+  $('#pathTitle').innerHTML=L.length>1?'<span class="u">حضرت محمد <span class="saw">ﷺ</span> سے '+(L.length-1)+' پشتیں</span><small class="en">'+(L.length-1)+' generations from Hazrat Muhammad ﷺ</small>':'حضرت محمد ﷺ';
   $('#pathList').innerHTML=L.slice().reverse().map(k=>`<li data-id="${esc(k)}">${esc(label(P[k])||'—')}</li>`).join('');$('#secPath').hidden=false;
   $('#pathBtn').hidden=true;centerOn(PROPHET,Math.min(T.k,0.6))};
 $('#pathList').addEventListener('click',e=>{const li=e.target.closest('li');if(li&&pos[li.dataset.id])centerOn(li.dataset.id,Math.max(T.k,0.7))});
@@ -714,10 +759,10 @@ function select(id){sel=id;delArm=false;$('#delBtn').textContent='Delete';msg(''
     $('#gM').classList.toggle('on',p.g!=='f');$('#gF').classList.toggle('on',p.g==='f');['N','K','P'].forEach(c=>$('#hl'+c).classList.toggle('on',(p.star||'')===({N:'',K:'k',P:'p'})[c]));
     $('#chFather').disabled=!p.parent;
     $('#secAdd').hidden=!canAdd;$('#famAddNote').hidden=canWrite;$('#sugText').value='';$('#suggestMsg').textContent='';
-    $('#secFix').hidden=!(canWrite||own);$('#noteLbl').hidden=!canWrite;$('#secFix h3').textContent=own?'Correct the name you added':pend?'Change the name before approving':'Correct this name';
+    $('#secFix').hidden=!(canWrite||own);$('#noteLbl').hidden=!canWrite;$('#secFix h3').innerHTML=own?'<span class="u">اپنا درج کیا ہوا نام درست کریں</span><small class="en">Correct the name you added</small>':pend?'Change the name before approving':'Correct this name';$('#saveBtn').innerHTML=own?'<span class="u">محفوظ کریں</span><small class="en">Save</small>':'Save';
     $('#secSug').hidden=canWrite||own;$('#secMore').hidden=!canWrite||pend;
     $('#secPend').hidden=!pend;$('#pendOwner').hidden=!canWrite;
-    $('#pendBy').textContent=own?'You added this name. You can correct it above until Iftikhar approves it.':'Added by '+(p.by||'a family member')+'.';
+    $('#pendBy').innerHTML=canWrite?'Added by '+esc(p.by||'a family member')+'.':own?'<span class="urm">یہ نام آپ نے درج کیا ہے۔ منظوری تک اوپر سے درست کر سکتے ہیں۔</span>':'<span class="urm">'+esc(p.by||'خاندان کے ایک فرد')+' نے درج کیا — منظوری کا انتظار ہے۔</span>';$('#secPend h3').innerHTML=canWrite?'New entry — waiting for approval':'<span class="u">نیا اندراج — منظوری کا انتظار</span><small class="en">Waiting for approval</small>';
     $('#delBtn').hidden=!(canWrite&&!pend);$('#delBtn').disabled=hasKids;$('#delBtn').title=hasKids?'Remove or move the children first':'';
     if(id!==pathFor){$('#secPath').hidden=true;$('#pathBtn').hidden=id===PROPHET}
     if(!sugPicking&&sugFather&&$('#sugPicked').dataset.for!==id){sugFather=null;$('#sugPicked').textContent=''}$('#sugPicked').dataset.for=id;
@@ -734,12 +779,12 @@ function tapNode(id){if(picking){finishPick(id);return}
     if((P[a].g==='f')===(P[id].g==='f')){select(a);msg(P[a].g==='f'?'Pick a man as her husband.':'Pick a woman as his wife.',true);return}
     const wife=P[a].g==='f'?a:id,hus=P[a].g==='f'?id:a;queue({op:'set',id:wife,f:{spouse:hus}});select(a);msg('Linked as husband and wife');return}
   if(sugPicking){const who=sugPicking;sugPicking=null;$('#cancelPick').click();if(id===who||ancestors(id).has(who)){select(who);msg('That cannot be his father.',true);return}
-    sugFather=id;select(who);setKind('father');$('#sugPicked').innerHTML='Correct father: <span class="ur">'+esc(label(P[id])||'—')+'</span>';return}
+    sugFather=id;select(who);setKind('father');$('#sugPicked').innerHTML='صحیح والد: <span class="ur">'+esc(label(P[id])||'—')+'</span>';return}
   select(id)}
-$('#sugPickBtn').onclick=()=>{if(!sel)return;sugPicking=sel;cvEl.classList.add('picking');$('#bannerTxt').textContent='Now tap the correct father of '+(label(P[sel])||'this person');$('#banner').hidden=false;
+$('#sugPickBtn').onclick=()=>{if(!sel)return;sugPicking=sel;cvEl.classList.add('picking');$('#bannerTxt').textContent='اب درخت میں '+(label(P[sel])||'')+' کے صحیح والد پر ٹیپ کریں';$('#banner').hidden=false;
   if(matchMedia('(max-width:760px)').matches)$('#cv').scrollIntoView()};
 function setKind(k){sugKind=k;document.querySelectorAll('.kind').forEach(b=>b.classList.toggle('on',b.dataset.kind===k));
-  $('#sugLbl').firstChild.textContent=({name:'Correct spelling',father:'Or write his correct father’s name (optional)',other:'What is wrong?'})[k];
+  $('#sugLbl').firstChild.textContent=({name:'صحیح نام',father:'یا صحیح والد کا نام لکھیں (اختیاری)',other:'کیا غلط ہے؟'})[k];
   $('#sugFatherBox').hidden=k!=='father';$('#sugText').placeholder=({name:'صحیح نام / correct name',father:'صحیح والد کا نام / correct father',other:'تفصیل / details'})[k]}
 document.querySelectorAll('.kind').forEach(b=>b.onclick=()=>setKind(b.dataset.kind));
 // ---- changes
@@ -747,9 +792,9 @@ $('#saveBtn').onclick=()=>{if(!sel)return;const name=$('#fName').value.trim(),no
   if(!name&&!canWrite){msg('Type the name first.',true);return}
   queue(canWrite?{op:'edit',id:sel,name,note}:{op:'edit',id:sel,name});msg(navigator.onLine?'Saved':'Saved on this phone — will be sent when online')};
 $('#fName').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#saveBtn').click()}});
-function addChild(g){if(!sel||!canAdd)return;const name=$('#fSon').value.trim();if(!name&&!canWrite){msg('Type the child’s name first.',true);$('#fSon').focus();return}
+function addChild(g){if(!sel||!canAdd)return;const name=$('#fSon').value.trim();if(!name&&!canWrite){msg('پہلے بچے کا نام لکھیں۔',true);$('#fSon').focus();return}
   const id=rid('c');queue({op:'add',id,parent:sel,name,g,n:OUT.length});$('#fSon').value='';$('#fSon').focus();
-  msg((g==='f'?'Daughter':'Son')+' added'+(canWrite?'':' — waiting for Iftikhar’s approval')+(navigator.onLine?'':' (will be sent when online)'))}
+  msg(canWrite?(g==='f'?'Daughter':'Son')+' added':(g==='f'?'بیٹی':'بیٹا')+' درج ہو گیا — منظوری کا انتظار'+(navigator.onLine?'':' (انٹرنیٹ ملنے پر بھیج دیا جائے گا)'))}
 $('#addSon').onclick=()=>addChild('m');$('#addDau').onclick=()=>addChild('f');
 $('#fSon').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#addSon').click()}});
 const setF=(f,ok)=>{if(sel&&canWrite){queue({op:'set',id:sel,f});msg(ok)}};
@@ -774,8 +819,8 @@ $('#apprAll').onclick=()=>{let n=0,again=true;while(again){again=false;for(const
   keep('out',OUT);rebuild();sync();msg(n?`Approved ${n} new ${n===1?'entry':'entries'}`:'Nothing to approve.')};
 $('#rejBtn').onclick=()=>{if(!sel||!P[sel].pend)return;if(kids(sel).length){msg('Reject his children first.',true);return}queue({op:'reject',id:sel});select(null);msg('Rejected')};
 $('#suggestBtn').onclick=()=>{const m=$('#suggestMsg'),text=$('#sugText').value.trim(),fa=sugKind==='father'?sugFather:null;
-  if(!text&&!fa){m.textContent=sugKind==='father'?'Pick the correct father, or write his name.':'Write your suggestion first.';return}
-  queue({op:'suggest',sid:rid('s'),person:sel,kind:sugKind,text,father:fa||''});$('#sugText').value='';sugFather=null;$('#sugPicked').textContent='';m.textContent=navigator.onLine?'Thank you. Your suggestion was sent to Iftikhar.':'Saved — it will be sent to Iftikhar when you are online.'};
+  if(!text&&!fa){m.textContent=sugKind==='father'?'صحیح والد منتخب کریں یا ان کا نام لکھیں۔':'پہلے اپنی تجویز لکھیں۔';return}
+  queue({op:'suggest',sid:rid('s'),person:sel,kind:sugKind,text,father:fa||''});$('#sugText').value='';sugFather=null;$('#sugPicked').textContent='';m.textContent=navigator.onLine?'شکریہ! آپ کی تجویز افتخار صاحب کو بھیج دی گئی۔':'محفوظ ہو گئی — انٹرنیٹ ملنے پر بھیج دی جائے گی۔'};
 function setModeButtons(){}
 $('#goProphet').onclick=()=>{if(pos[PROPHET])centerOn(PROPHET,0.8)};
 $('#goMe').onclick=()=>{const m=ME&&ME.pid;if(m&&pos[m]){select(m);centerOn(m,0.9)}};

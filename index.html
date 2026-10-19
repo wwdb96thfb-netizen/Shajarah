@@ -249,6 +249,8 @@ body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
     <div class="search" id="searchBox" hidden><input id="q" type="search" placeholder="نام تلاش کریں / search a name" aria-label="Search a name"><div class="results" id="res" hidden></div></div>
     <div class="menu" id="menu" hidden>
       <button type="button" id="goProphet">Go to Hazrat Muhammad ﷺ</button>
+      <button type="button" id="goMe" hidden>My place in the Shajarah</button>
+      <button type="button" id="myPath" hidden>My connection to Hazrat Muhammad ﷺ</button>
       <button type="button" id="pendList" hidden>New entries</button>
       <button type="button" id="sugList" hidden>Suggestions</button>
       <button type="button" id="usersBtn" hidden>People &amp; links</button>
@@ -338,6 +340,7 @@ body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
   <h3>People &amp; personal links</h3>
   <div class="meta">Make one link for each person. A link works on <b>one phone only</b> — the first phone that opens it. A forwarded link will not open for anyone else.</div>
   <div class="box"><label class="field">Person’s name<input id="uName" type="text" dir="auto" placeholder="e.g. Abbu, Chacha Jan"></label>
+    <div class="row"><button type="button" id="uWho">Who is he in the Shajarah? Pick in the tree</button></div><div class="meta" id="uWhoName"></div>
     <label class="meta"><input id="uAdd" type="checkbox" checked> Allowed to add sons and daughters (otherwise: view and suggest only)</label>
     <button type="button" class="primary" id="uGo">Make personal link</button>
     <div id="uNew" class="meta"></div></div>
@@ -426,7 +429,7 @@ function rebuild(){P=applyLocal(DATA?DATA.people:{});settings={start:DATA&&DATA.
   if(sel&&P[sel])select(sel);else if(sel)select(null);if(canWrite)pendCount()}
 function firstView(){if(pos[PROPHET])centerOn(PROPHET,0.8);else fit()}
 function setData(j){DATA={ver:j.ver,people:j.people,start:j.start,me:j.me,suggestions:j.suggestions||[]};keep('tree',DATA);setMe(j.me)}
-function setMe(me){ME=me;canWrite=!!(me&&me.owner);canAdd=canWrite||(me&&me.role==='family');document.body.classList.toggle('ro',!canWrite);
+function setMe(me){ME=me;$('#goMe').hidden=$('#myPath').hidden=!(me&&me.pid);canWrite=!!(me&&me.owner);canAdd=canWrite||(me&&me.role==='family');document.body.classList.toggle('ro',!canWrite);
   ['pendList','sugList','usersBtn','histBtn'].forEach(b=>$('#'+b).hidden=!canWrite);drawPush();$('#pEmptyAdd').hidden=!canAdd;watermark()}
 async function sync(){if(syncing||!cfg.c||(ME&&ME.owner&&!PIN))return;syncing=true;pill();
   try{if(OUT.length){const batch=OUT.slice(0,100),j=await api('/api/sync',{method:'POST',body:JSON.stringify({ops:batch})});
@@ -661,7 +664,7 @@ function drawCouple(id){const p=P[id],fem=p.g==='f';$('#coupleTitle').textConten
   $('#coupleList').innerHTML=h||'<span class="meta">None recorded.</span>';
   const opts=p.parent?wivesOf(p.parent):[];
   $('#motherRow').innerHTML=opts.length?'<span class="meta" style="align-self:center">Mother:</span>'+opts.map(w=>`<button type="button" data-mother="${esc(w.key)}" class="${p.mother===w.key?'on':''}">${esc(w.name)}</button>`).join('')+`<button type="button" data-mother="" class="${!p.mother?'on':''}">Not set</button>`:''}
-let spousePicking=null;
+let spousePicking=null,whoPick=null,newPid='';
 $('#pickSpouse').onclick=()=>{if(!sel)return;spousePicking=sel;cvEl.classList.add('picking');$('#bannerTxt').textContent=P[sel].g==='f'?'Now tap her husband':'Now tap his wife';$('#banner').hidden=false};
 $('#wifeAdd').onclick=()=>{const n=$('#wifeName').value.trim();if(!sel||!n)return;const w=((P[sel].wives)||[]).map(x=>({name:x.name,show:x.show?1:0}));if(w.some(x=>x.name===n))return;w.push({name:n,show:0});
   queue({op:'set',id:sel,f:{wives:w}});$('#wifeName').value='';msg('Wife added')};
@@ -673,14 +676,14 @@ $('#coupleBox').addEventListener('change',e=>{const n=e.target.dataset.wshow;if(
 function select(id){sel=id;delArm=false;$('#delBtn').textContent='Delete';msg('');
   $('#pEmpty').hidden=!!id;$('#pBody').hidden=!id;
   if(id){const p=P[id];$('#who').textContent=label(p)||'(blank — unclear name)';$('#who').className='who'+(label(p)?'':' blank');
-    $('#rel').innerHTML=relFull(id)+(p.local?'<br><b>Saved on this phone — it will be sent (and written in Urdu) when online.</b>':'');
+    $('#rel').innerHTML=(ME&&ME.pid===id?'<b>This is you.</b><br>':'')+relFull(id)+(p.local?'<br><b>Saved on this phone — it will be sent (and written in Urdu) when online.</b>':'');
     $('#fName').value=p.name||'';$('#fNote').value=p.note||'';$('#fSon').value='';$('#addTo').textContent=label(p)||'(blank)';
     const g=$('#guess');if(p.guess&&!label(p)){g.hidden=false;g.innerHTML=`Earlier reading (not certain): <span class="ur">${esc(p.guess)}</span>`}else g.hidden=true;
     const hasKids=kids(id).length>0,pend=!!p.pend,own=!canWrite&&pend&&!!p.mine;
     $('#gM').classList.toggle('on',p.g!=='f');$('#gF').classList.toggle('on',p.g==='f');['N','K','P'].forEach(c=>$('#hl'+c).classList.toggle('on',(p.star||'')===({N:'',K:'k',P:'p'})[c]));
     $('#chFather').disabled=!p.parent;
     $('#secAdd').hidden=!canAdd;$('#famAddNote').hidden=canWrite;$('#sugText').value='';$('#suggestMsg').textContent='';
-    $('#secFix').hidden=!(canWrite?!pend:own);$('#noteLbl').hidden=!canWrite;$('#secFix h3').textContent=own?'Correct the name you added':'Correct this name';
+    $('#secFix').hidden=!(canWrite||own);$('#noteLbl').hidden=!canWrite;$('#secFix h3').textContent=own?'Correct the name you added':pend?'Change the name before approving':'Correct this name';
     $('#secSug').hidden=canWrite||own;$('#secMore').hidden=!canWrite||pend;
     $('#secPend').hidden=!pend;$('#pendOwner').hidden=!canWrite;
     $('#pendBy').textContent=own?'You added this name. You can correct it above until Iftikhar approves it.':'Added by '+(p.by||'a family member')+'.';
@@ -693,6 +696,9 @@ function select(id){sel=id;delArm=false;$('#delBtn').textContent='Delete';msg(''
     setKind(sugKind)}
   document.querySelectorAll('.node').forEach(n=>n.classList.toggle('sel',n.dataset.id===id))}
 function tapNode(id){if(picking){finishPick(id);return}
+  if(whoPick){const w=whoPick;whoPick=null;$('#cancelPick').click();
+    if(w.code){api('/api/people/'+w.code+'/pid',{method:'POST',body:JSON.stringify({pid:id})}).then(()=>{showUsers();$('#uNew').innerHTML='<b>'+esc(w.name)+'</b> is now marked as <span class="ur">'+esc(label(P[id]))+'</span>.'}).catch(()=>{showUsers();$('#uNew').textContent='Needs internet.'})}
+    else{newPid=id;$('#uWhoName').innerHTML='He is: <span class="ur">'+esc(label(P[id]))+'</span>';$('#usrM').hidden=false}return}
   if(spousePicking){const a=spousePicking;spousePicking=null;$('#cancelPick').click();if(id===a){select(a);return}
     if((P[a].g==='f')===(P[id].g==='f')){select(a);msg(P[a].g==='f'?'Pick a man as her husband.':'Pick a woman as his wife.',true);return}
     const wife=P[a].g==='f'?a:id,hus=P[a].g==='f'?id:a;queue({op:'set',id:wife,f:{spouse:hus}});select(a);msg('Linked as husband and wife');return}
@@ -720,7 +726,7 @@ $('#hlN').onclick=()=>setF({star:''},'Highlight removed');$('#hlK').onclick=()=>
 $('#visShow').onclick=()=>setF({vis:'show'},'Shown to family');$('#visHide').onclick=()=>setF({vis:'hide'},'Hidden from family');
 $('#gM').onclick=()=>setF({g:'m'},'Marked as son');$('#gF').onclick=()=>setF({g:'f'},'Marked as daughter');
 $('#chFather').onclick=()=>{if(!sel)return;picking=sel;cvEl.classList.add('picking');$('#bannerTxt').textContent=`Now tap the correct father of ${label(P[sel])||'this person'}`;$('#banner').hidden=false};
-$('#cancelPick').onclick=()=>{picking=null;sugPicking=null;spousePicking=null;cvEl.classList.remove('picking');$('#banner').hidden=true};
+$('#cancelPick').onclick=()=>{if(whoPick){whoPick=null;$('#usrM').hidden=false}picking=null;sugPicking=null;spousePicking=null;cvEl.classList.remove('picking');$('#banner').hidden=true};
 function finishPick(fid){const child=picking;$('#cancelPick').click();
   if(fid===child){msg('A person can’t be his own father.',true);return}
   if(ancestors(fid).has(child)){msg('That would make him his own ancestor.',true);return}
@@ -741,6 +747,8 @@ $('#suggestBtn').onclick=()=>{const m=$('#suggestMsg'),text=$('#sugText').value.
   queue({op:'suggest',sid:rid('s'),person:sel,kind:sugKind,text,father:fa||''});$('#sugText').value='';sugFather=null;$('#sugPicked').textContent='';m.textContent=navigator.onLine?'Thank you. Your suggestion was sent to Iftikhar.':'Saved — it will be sent to Iftikhar when you are online.'};
 function setModeButtons(){}
 $('#goProphet').onclick=()=>{if(pos[PROPHET])centerOn(PROPHET,0.8)};
+$('#goMe').onclick=()=>{const m=ME&&ME.pid;if(m&&pos[m]){select(m);centerOn(m,0.9)}};
+$('#myPath').onclick=()=>{const m=ME&&ME.pid;if(m&&P[m]){select(m);$('#pathBtn').click()}};
 // search
 $('#q').addEventListener('input',()=>{const q=$('#q').value.trim();const box=$('#res');
   if(!q){box.hidden=true;return}
@@ -757,7 +765,7 @@ function modal(title,html){$('#sugTitle').textContent=title;$('#sugBody').innerH
 $('#sugX').onclick=()=>{$('#sugM').hidden=true};
 function showPend(){const ids=Object.keys(P).filter(k=>P[k].pend);
   modal('New entries waiting for approval',ids.length?ids.map(id=>{const x=P[id],f=P[x.parent];return `<div class="sugg"><div><b>${esc(x.by||'Family')}</b> added a ${x.g==='f'?'daughter':'son'} under <span class="ur">${esc(f?label(f)||'—':'—')}</span></div><div class="t">${esc(x.name)}</div>
-    <div class="row"><button type="button" data-appr="${esc(id)}">Approve</button><button type="button" data-go="${esc(id)}">Show in tree</button></div></div>`}).join(''):'Nothing is waiting for approval.')}
+    <div class="row"><button type="button" data-appr="${esc(id)}">✓ Approve</button><button type="button" data-edit="${esc(id)}">Change name</button><button type="button" data-rej="${esc(id)}">✕ Reject</button></div></div>`}).join(''):'Nothing is waiting for approval.')}
 function showSugs(){const L=(DATA&&DATA.suggestions||[]).filter(x=>!OUT.some(o=>o.op==='resolve'&&o.sid===x.sid));
   modal('Suggestions from family',L.length?L.map(x=>`<div class="sugg"><div><b>${esc(x.by)}</b> — ${esc(x.kind)} — about <span class="ur">${esc(x.person_name||'—')}</span></div><div class="t">${esc(x.text)}</div>
     ${x.father?`<div>Suggested correct father: <span class="ur">${esc(x.father_name)}</span></div>`:''}
@@ -766,6 +774,8 @@ $('#pendList').onclick=showPend;$('#sugList').onclick=showSugs;
 $('#sugBody').addEventListener('click',e=>{const g=e.target.closest('[data-go]'),d=e.target.closest('[data-done]'),a=e.target.closest('[data-appr]');
   if(g){const id=g.dataset.go;$('#sugM').hidden=true;if(P[id]){if(!pos[id]){viewMode='all';viewRoot=null;setModeButtons();draw()}select(id);centerOn(id,Math.max(T.k,0.8))}}
   if(d){queue({op:'resolve',sid:d.dataset.done});showSugs()}
+  const ed=e.target.closest('[data-edit]');if(ed){openEntry(ed.dataset.edit)}
+  const rj=e.target.closest('[data-rej]');if(rj){const id=rj.dataset.rej;if(kids(id).length){toast('Reject his children first.',true);return}queue({op:'reject',id});showPend()}
   const fx2=e.target.closest('[data-fix]');if(fx2){const c=fx2.dataset.p,f=fx2.dataset.f;if(f===c||ancestors(f).has(c)){toast('That would make him his own ancestor.',true);return}
     OUT.push({op:'set',id:c,f:{parent:f}});OUT.push({op:'resolve',sid:fx2.dataset.fix});keep('out',OUT);rebuild();sync();showSugs();toast('Father changed')}
   if(a){if(approveOne(a.dataset.appr)){rebuild();sync();showPend()}else{$('#sugBody').insertAdjacentHTML('afterbegin','<div class="msg err">Approve his father first.</div>')}}});
@@ -774,21 +784,25 @@ $('#histBtn').onclick=async()=>{modal('History of changes','Loading…');try{con
   catch(e){$('#sugBody').textContent=e.net?'Needs internet.':'Could not load.'}};
 async function showUsers(){const L=$('#uList');$('#usrM').hidden=false;L.textContent='Loading…';
   try{const j=await api('/api/people');if(!j.people.length){L.textContent='No personal links yet.';return}
-    L.innerHTML=j.people.map(u=>`<div class="sugg"><div><b>${esc(u.name)}</b> — ${u.cancelled?'<span style="color:var(--warn)">cancelled</span>':u.opened?'opened on a phone':u.expired?'<span style="color:var(--warn)">link expired — make a new link</span>':'not opened yet (link works for 3 days)'} · ${u.role==='viewer'?'view &amp; suggest only':'can add names'}</div>
+    L.innerHTML=j.people.map(u=>`<div class="sugg"><div><b>${esc(u.name)}</b>${u.pname?` (<span class="ur">${esc(u.pname)}</span>)`:''} — ${u.cancelled?'<span style="color:var(--warn)">cancelled</span>':u.opened?'opened on a phone':u.expired?'<span style="color:var(--warn)">link expired — make a new link</span>':'not opened yet (link works for 3 days)'} · ${u.role==='viewer'?'view &amp; suggest only':'can add names'}</div>
       ${!u.cancelled&&!u.opened&&!u.expired?`<input class="lnk" readonly value="${esc(u.link)}" aria-label="Link for ${esc(u.name)}"><div class="row"><button type="button" data-share="${esc(u.link)}" data-n="${esc(u.name)}">Share link</button></div>`:''}
       <div class="row">${u.cancelled?`<button type="button" data-act="restore" data-code="${esc(u.code)}">Restore</button>`:`<button type="button" data-act="cancel" data-code="${esc(u.code)}">Cancel access</button>`}
       <button type="button" data-act="renew" data-code="${esc(u.code)}">New link (new phone)</button>
+      <button type="button" data-who="${esc(u.code)}" data-n="${esc(u.name)}">${u.pid?'Change who he is':'Who is he?'}</button>
       <button type="button" data-act="role" data-code="${esc(u.code)}" data-role="${u.role==='viewer'?'family':'viewer'}">${u.role==='viewer'?'Allow adding':'Make view-only'}</button></div></div>`).join('')}
   catch(e){L.textContent=e.net?'Managing people needs internet.':'Could not load.'}}
 async function shareLink(link,name){const text='السلام علیکم۔ یہ آپ کا ذاتی شجرہ لنک ہے۔ یہ صرف ایک فون پر کھلے گا، کسی کو فارورڈ نہ کریں۔\nYour personal Shajarah link (opens on one phone only):\n'+link;
   try{if(navigator.share){await navigator.share({title:'Shajarah — '+name,text});return}}catch(e){return}
   try{await navigator.clipboard.writeText(text);toast('Link copied — paste it in WhatsApp')}catch(e){toast('Select the link and copy it',true)}}
-$('#usersBtn').onclick=showUsers;$('#usrX').onclick=()=>{$('#usrM').hidden=true};
+$('#usersBtn').onclick=showUsers;
+const startWho=(w)=>{whoPick=w;$('#usrM').hidden=true;select(null);cvEl.classList.add('picking');$('#bannerTxt').textContent='Tap who '+(w.name||'he')+' is in the Shajarah';$('#banner').hidden=false};
+$('#uWho').onclick=()=>startWho({name:$('#uName').value.trim()});$('#usrX').onclick=()=>{$('#usrM').hidden=true};
 $('#uGo').onclick=async()=>{const n=$('#uName').value.trim();if(!n){$('#uNew').textContent='Type the person’s name first.';return}
-  $('#uGo').disabled=true;try{const r=await api('/api/people',{method:'POST',body:JSON.stringify({name:n,role:$('#uAdd').checked?'family':'viewer'})});$('#uName').value='';
+  $('#uGo').disabled=true;try{const r=await api('/api/people',{method:'POST',body:JSON.stringify({name:n,role:$('#uAdd').checked?'family':'viewer',pid:newPid})});$('#uName').value='';newPid='';$('#uWhoName').textContent='';
     $('#uNew').innerHTML=`Link for <b>${esc(n)}</b> is ready.`;shareLink(r.link,n);showUsers()}
   catch(e){$('#uNew').textContent=e.net?'Needs internet.':'Could not make the link.'}finally{$('#uGo').disabled=false}};
 $('#uList').addEventListener('click',async e=>{const s=e.target.closest('[data-share]');if(s){shareLink(s.dataset.share,s.dataset.n);return}
+  const wb=e.target.closest('[data-who]');if(wb){startWho({code:wb.dataset.who,name:wb.dataset.n});return}
   const b=e.target.closest('[data-act]');if(!b)return;b.disabled=true;
   try{const r=await api('/api/people/'+b.dataset.code+'/'+b.dataset.act,{method:'POST',body:JSON.stringify({role:b.dataset.role||''})});
     if(b.dataset.act==='renew'){const nm=b.closest('.sugg').querySelector('b').textContent;$('#uNew').innerHTML=`New link for <b>${esc(nm)}</b> is ready. The old link and old phone no longer work.`;shareLink(r.link,nm)}
@@ -809,8 +823,10 @@ async function enablePush(test){if(!pushOK()){toast(IOS?'On iPhone: add Shajarah
   catch(e){drawPush();if(!e.stop)toast(e.net?'Needs internet to turn on notifications.':'Notifications could not be turned on.',true);return false}}
 $('#pushBtn').onclick=()=>enablePush(true);
 // opened from a notification: show what is waiting
-function openFromNote(){const g=(location.hash||'').slice(1);if(!g||!canWrite)return;try{history.replaceState(null,'',location.pathname)}catch(e){}
-  if(g==='pend')showPend();else if(g==='sug')showSugs()}
+function openEntry(id){$('#sugM').hidden=true;if(!P[id]){toast('This entry is no longer waiting.',true);return}
+  if(!pos[id])draw();select(id);centerOn(id,0.9);if(canWrite)setTimeout(()=>{const f=$('#fName');f.focus();f.select()},250)}
+function openFromNote(){const g=decodeURIComponent((location.hash||'').slice(1));if(!g||!canWrite)return;try{history.replaceState(null,'',location.pathname)}catch(e){}
+  if(g==='pend')showPend();else if(g==='sug')showSugs();else if(g.startsWith('entry:'))openEntry(g.slice(6))}
 if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data&&e.data.go){location.hash=e.data.go;sync().then(openFromNote)}});
 // ---- start
 async function start(){

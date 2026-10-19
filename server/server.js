@@ -7,7 +7,7 @@
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto'), os = require('os');
 const { spawn } = require('child_process');
 
-const VERSION = 4;
+const VERSION = 5;
 const ROOT = __dirname, DATA = path.join(ROOT, 'data'), BACK = path.join(DATA, 'backups');
 const CFG = path.join(DATA, 'config.json'), TREE = path.join(DATA, 'tree.json'), HIST = path.join(DATA, 'history.jsonl');
 const APP_URL = process.env.SJ_APP_URL || 'https://wwdb96thfb-netizen.github.io/Shajarah/';
@@ -27,6 +27,7 @@ try { cfg = JSON.parse(fs.readFileSync(CFG, 'utf8')); } catch (e) { cfg = { topi
 if (!cfg.devs) cfg.devs = {};
 if (!cfg.urdu) cfg.urdu = {};
 if (!Array.isArray(cfg.subs)) cfg.subs = [];
+if (!cfg.acts) cfg.acts = {};   // one-time Approve / Reject keys sent inside the owner's notifications
 if (!cfg.vapid) { const k = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' }), j = k.publicKey.export({ format: 'jwk' }); cfg.vapid = { priv: k.privateKey.export({ format: 'jwk' }), pub: Buffer.concat([Buffer.from([4]), Buffer.from(j.x, 'base64url'), Buffer.from(j.y, 'base64url')]).toString('base64url') }; }
 const saveCfg = () => writeJSON(CFG, cfg);
 saveCfg();
@@ -57,10 +58,10 @@ const history = (who, action, id, before, after) => {
 // ---- who is asking
 const who = code => {
   if (!code) return null;
-  if (code === cfg.ownerCode) return { name: cfg.ownerName || 'Iftikhar', role: 'owner', owner: true, code };
+  if (code === cfg.ownerCode) return { name: cfg.ownerName || 'Iftikhar', role: 'owner', owner: true, code, pid: tree.me || '' };
   const p = cfg.people.find(x => x.code === code);
   if (!p) return null;
-  return { name: p.name, role: p.role === 'viewer' ? 'viewer' : 'family', code, cancelled: !!p.cancelled };
+  return { name: p.name, role: p.role === 'viewer' ? 'viewer' : 'family', code, cancelled: !!p.cancelled, pid: p.pid && tree.people[p.pid] ? p.pid : '' };
 };
 const clip = (s, n) => String(s == null ? '' : s).replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
 const nameOf = id => (tree.people[id] && tree.people[id].name) || '';
@@ -160,10 +161,17 @@ async function applyOps(user, ops) {
   if (!user.owner) {
     const added = ops.filter((o, i) => o && o.op === 'add' && out[i] && out[i].ok && out[i].fresh), sug = ops.filter((o, i) => o && o.op === 'suggest' && out[i] && out[i].fresh);
     if (added.length || sug.length) {
-      const names = added.map((o, i) => tree.people[o.id] && tree.people[o.id].name).filter(Boolean);
-      const body = (added.length ? user.name + ' added ' + (added.length === 1 ? names[0] : added.length + ' names: ' + names.slice(0, 4).join('، ') + (names.length > 4 ? '…' : '')) : '') +
-        (sug.length ? (added.length ? ' and sent ' : user.name + ' sent ') + (sug.length === 1 ? 'a suggestion' : sug.length + ' suggestions') : '') + '. Tap to review.';
-      notifyOwner({ title: added.length ? 'Shajarah: new names to approve' : 'Shajarah: new suggestion', body, go: added.length ? 'pend' : 'sug' });
+      const by = user.name + (user.pid ? ' (' + nameOf(user.pid) + ')' : '');
+      (async () => {
+        if (added.length && added.length <= 3) {
+          for (const o of added) { const x = tree.people[o.id]; if (!x) continue;
+            const key = a => { const t = crypto.randomBytes(18).toString('base64url'); cfg.acts[crypto.createHash('sha256').update(t).digest('hex')] = { id: o.id, act: a, exp: Date.now() + 14 * 864e5 }; return t; };
+            const acts = { approve: key('approve'), reject: key('reject') }; saveCfg();
+            await notifyOwner({ title: 'New ' + (x.g === 'f' ? 'daughter' : 'son') + ': ' + x.name, body: by + ' added ' + x.name + ' as ' + (x.g === 'f' ? 'daughter' : 'son') + ' of ' + nameOf(x.parent) + '. Tap to change the name.', go: 'entry:' + o.id, server: publicUrl, acts, actions: true });
+          }
+        } else if (added.length) await notifyOwner({ title: 'Shajarah: ' + added.length + ' new names to approve', body: by + ' added ' + added.map(o => tree.people[o.id] && tree.people[o.id].name).filter(Boolean).slice(0, 5).join('، ') + '. Tap to review.', go: 'pend' });
+        if (sug.length) await notifyOwner({ title: 'Shajarah: new suggestion', body: by + ' sent ' + (sug.length === 1 ? 'a suggestion' : sug.length + ' suggestions') + '. Tap to review.', go: 'sug' });
+      })();
     }
   }
   return out;
@@ -260,7 +268,7 @@ function treeFor(user) {
     const wv = (x.wives || []).filter(w => user.owner || w.show), mo = String(x.mother || ''), moOk = !mo ? '' : mo.startsWith('w:') ? (user.owner || (tree.people[x.parent] && (tree.people[x.parent].wives || []).some(w => w.show && 'w:' + w.name === mo)) ? mo : '') : (user.owner || !H.has(mo) ? mo : '');
     people[k] = { wives: wv.map(w => user.owner ? w : { name: w.name }), mother: moOk, name: x.name, parent: x.parent, order: x.order, g: x.g || '', note: x.note || '', star: x.star || '', spouse: x.spouse || '', guess: x.guess || '',
     pend: x.status === 'pending' ? 1 : 0, by: x.status === 'pending' ? x.added_by : '', mine: x.status === 'pending' && x.added_code === idOf(user.code) ? 1 : 0 }; if (user.owner && H.has(k)) people[k].hid = hiddenOf(x) ? 1 : 2; }
-  const o = { ok: true, ver: tree.ver, people, start: tree.start || 'p0084', me: { name: user.name, role: user.role, owner: !!user.owner } };
+  const o = { ok: true, ver: tree.ver, people, start: tree.start || 'p0084', me: { name: user.name, role: user.role, owner: !!user.owner, pid: user.pid || '' } };
   if (user.owner) o.suggestions = tree.suggestions.filter(s => !s.done);
   return o;
 }
@@ -288,6 +296,18 @@ async function handle(req, res) {
     const code = [cfg.ownerCode].concat(cfg.people.filter(x => !x.cancelled).map(x => x.code)).find(c => idOf(c) === uid);
     if (!code) return send(res, 404, { error: 'unknown', gone: crypto.createHmac('sha256', cfg.topic).update(n + ':' + uid).digest('hex') });
     return send(res, 200, { ok: true, proof: crypto.createHmac('sha256', code).update(n).digest('hex'), version: VERSION });
+  }
+  if (p[1] === 'act' && req.method === 'POST') {
+    const b = await body(req), h = crypto.createHash('sha256').update(String(b.t || '')).digest('hex'), a = cfg.acts[h];
+    for (const k in cfg.acts) if (cfg.acts[k].exp < Date.now()) delete cfg.acts[k];
+    if (!a) return send(res, 404, { error: 'used', msg: 'This was already done, or the entry has changed.' });
+    for (const k in cfg.acts) if (cfg.acts[k].id === a.id) delete cfg.acts[k]; saveCfg();
+    const x = tree.people[a.id], nm = x ? x.name : '';
+    if (!x || x.status !== 'pending') return send(res, 200, { ok: false, msg: 'Already done: ' + (nm || 'this entry') + (x ? ' is already approved.' : ' was removed.') });
+    const r = await applyOps(who(cfg.ownerCode), [{ op: a.act, id: a.id }]);
+    if (r[0] && r[0].error) return send(res, 200, { ok: false, msg: r[0].error });
+    log('Owner', a.act === 'approve' ? 'approved' : 'rejected', nm, 'from a notification');
+    return send(res, 200, { ok: true, msg: (a.act === 'approve' ? 'Approved: ' : 'Rejected: ') + nm });
   }
   const user = who(String(req.headers['x-code'] || ''));
   if (!user) return send(res, 401, { error: 'code' });
@@ -317,7 +337,7 @@ async function handle(req, res) {
     pinFails.delete('o');
   }
   if (p[1] === 'tree' && req.method === 'GET') {
-    if (u.searchParams.get('v') === String(tree.ver)) return send(res, 200, { ok: true, same: true, ver: tree.ver, me: { name: user.name, role: user.role, owner: !!user.owner } });
+    if (u.searchParams.get('v') === String(tree.ver)) return send(res, 200, { ok: true, same: true, ver: tree.ver, me: { name: user.name, role: user.role, owner: !!user.owner, pid: user.pid || '' } });
     return send(res, 200, treeFor(user));
   }
   if (p[1] === 'sync' && req.method === 'POST') {
@@ -336,11 +356,11 @@ async function handle(req, res) {
     return send(res, 200, { ok: true });
   }
   if (p[1] === 'people' && req.method === 'GET') {
-    return send(res, 200, { ok: true, people: cfg.people.map(x => ({ code: x.code, name: x.name, role: x.role, cancelled: !!x.cancelled, opened: !!cfg.devs[idOf(x.code)], expired: !cfg.devs[idOf(x.code)] && Date.now() - Date.parse(x.linkAt || x.added || 0) > LINK_DAYS * 864e5, seen: (cfg.devs[idOf(x.code)] || {}).seen || '', link: link(x.code) })) });
+    return send(res, 200, { ok: true, people: cfg.people.map(x => ({ pid: x.pid || '', pname: x.pid ? nameOf(x.pid) : '', code: x.code, name: x.name, role: x.role, cancelled: !!x.cancelled, opened: !!cfg.devs[idOf(x.code)], expired: !cfg.devs[idOf(x.code)] && Date.now() - Date.parse(x.linkAt || x.added || 0) > LINK_DAYS * 864e5, seen: (cfg.devs[idOf(x.code)] || {}).seen || '', link: link(x.code) })) });
   }
   if (p[1] === 'people' && !p[2] && req.method === 'POST') {
     const b = await body(req), name = clip(b.name, 40); if (!name) return send(res, 400, { error: 'name' });
-    const x = { name, code: rnd(16), role: b.role === 'viewer' ? 'viewer' : 'family', added: new Date().toISOString(), linkAt: new Date().toISOString() };
+    const x = { name, code: rnd(16), role: b.role === 'viewer' ? 'viewer' : 'family', added: new Date().toISOString(), linkAt: new Date().toISOString(), pid: tree.people[b.pid] ? b.pid : '' };
     cfg.people.push(x); saveCfg(); writeLinks(); history('owner', 'made a personal link', '', '', name + ' (' + x.role + ')'); log('Personal link made for', name);
     return send(res, 200, { ok: true, link: link(x.code), code: x.code });
   }
@@ -350,6 +370,7 @@ async function handle(req, res) {
     if (p[3] === 'cancel') { x.cancelled = true; history('owner', 'cancelled access', '', '', x.name); }
     else if (p[3] === 'restore') { delete x.cancelled; history('owner', 'restored access', '', '', x.name); }
     else if (p[3] === 'role') x.role = b.role === 'viewer' ? 'viewer' : 'family';
+    else if (p[3] === 'pid') { x.pid = tree.people[b.pid] ? b.pid : ''; history('owner', 'set who the link belongs to', x.pid, '', x.name + ' = ' + nameOf(x.pid)); }
     else if (p[3] === 'renew') {   // new phone: a fresh link; the old link and old phone stop working
       delete cfg.devs[idOf(x.code)]; x.code = rnd(16); x.linkAt = new Date().toISOString(); delete x.cancelled; history('owner', 'new link (new phone)', '', '', x.name);
     } else return send(res, 400, { error: 'what' });

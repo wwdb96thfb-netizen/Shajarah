@@ -154,6 +154,8 @@ input,textarea,select{font-size:16px!important}
 .node.me rect{stroke:var(--pro);stroke-width:3}
 .wf{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 0}.wf .ur{font-family:var(--ur);font-size:1.05rem;color:var(--fg)}
 .wf button,#motherRow button{padding:4px 10px!important;font-size:.85rem}
+.node.wife rect{fill:var(--card);stroke:var(--pro);stroke-width:1.4}
+.edge.wedc{stroke:var(--pro);stroke-width:2.4}
 .phead{display:flex;align-items:center;justify-content:space-between}
 .pill{flex:none}
 .app{height:100%}
@@ -365,7 +367,7 @@ let DATA=load('tree');                   // the last tree received from the serv
 let OUT=load('out')||[];                 // changes made on this phone that the server has not received yet
 let PIN=null, server=null, syncing=false, finding=null, ME=DATA&&DATA.me||null;
 let P={}, settings={}, canWrite=false, canAdd=false, sugKind='name';
-let viewRoot=null, viewMode='all', PATH=new Set(), PROPHET='p0044', sel=null, picking=null, delArm=false, sugPicking=null, sugFather=null;
+let WPOS={}, viewRoot=null, viewMode='all', PATH=new Set(), PROPHET='p0044', sel=null, picking=null, delArm=false, sugPicking=null, sugFather=null;
 let pos={}, T={x:0,y:0,k:1}, first=true;
 const sampler=null;
 const BH=50, GAP=10, LEVEL=40, PAD=14;
@@ -520,9 +522,9 @@ document.addEventListener('copy',e=>{if(!canWrite&&!/INPUT|TEXTAREA/.test((e.tar
 // A run of 4+ people who each have exactly one child is folded into compact rows (read right to left, snaking).
 let chainEdges=[];
 const CHAIN_MIN=4, CHAIN_ROW_MAX=1700, CGAP=22, CROW=BH+26;
-function runFrom(id){const a=[id];let g=0;while(g++<600){const k=kids(a[a.length-1]);if(k.length!==1)break;a.push(k[0])}return a}
+function runFrom(id){const a=[id];if(wivesShown(id).length)return a;let g=0;while(g++<600){const k=kids(a[a.length-1]);if(k.length!==1||wivesShown(k[0]).length)break;a.push(k[0])}return a}
 function layout(){
-  pos={};chainEdges=[];const BW={};
+  pos={};chainEdges=[];WPOS={};const BW={};
   const roots=viewRoot&&P[viewRoot]?[viewRoot]:topRoots();
   const meSet=PATH;
   const bw=id=>{const p=P[id];return Math.max(64,tw(label(p)||'—',!!p.star,p.star==='p'?23:19)+2*PAD+(p.star==='p'?12:0),p.note?tw(p.note,false)*0.6+30:0)};
@@ -550,8 +552,12 @@ function layout(){
       const last=run[run.length-1];ks=kids(last);ky=(rows.length-1)*CROW+BH+LEVEL;
       var anchor=T.nodes.find(n=>n[0]===last);
     }else{
-      BW[id]=bw(id);T.nodes.push([id,-BW[id]/2,0,BW[id]]);T.segs.push({y0:0,y1:bh(id),l:-BW[id]/2,r:BW[id]/2});
-      ks=kids(id);ky=bh(id)>BH?bh(id)+LEVEL-18:BH+LEVEL;var anchor=null;
+      BW[id]=bw(id);T.nodes.push([id,-BW[id]/2,0,BW[id]]);let lft=-BW[id]/2;const WV=wivesShown(id);
+      if(WV.length){let x=-BW[id]/2;T.wives=[];WV.forEach((w,i)=>{const ww=Math.max(64,tw(w.name,false)+2*PAD);x-=WGAP+ww;T.wives.push([id,i,x,0,ww,w])});lft=x;
+        T.ax=WV.length===1?(0+(x+(T.wives[0][4])/2))/2:(lft+BW[id]/2)/2}
+      T.segs.push({y0:0,y1:bh(id),l:lft,r:BW[id]/2});
+      ks=kids(id);
+      if(WV.length){const gi=k=>{const m=P[k].mother||(WV.length===1?WV[0].key:'');return WV.findIndex(w=>w.key===m)};ks=ks.slice().sort((a,b)=>gi(a)-gi(b)||((P[a].order??0)-(P[b].order??0)))}ky=bh(id)>BH?bh(id)+LEVEL-18:BH+LEVEL;var anchor=null;
     }
     if(ks.length){
       // first son on the right (Urdu order); each next brother slides in from the left
@@ -559,15 +565,15 @@ function layout(){
       for(let i=1;i<subs.length;i++){let sft=1e9;
         for(const c of subs[i].segs)for(const a of acc)if(c.y0<a.y1&&a.y0<c.y1){const g=(c.y0===0&&a.y0===0)?GAP:GAP*2;sft=Math.min(sft,a.l-g-c.r)}
         if(sft===1e9)sft=off[i-1]-60;off.push(sft);subs[i].segs.forEach(c=>acc.push({y0:c.y0,y1:c.y1,l:c.l+sft,r:c.r+sft}))}
-      const mid=(off[0]+off[off.length-1])/2,ax=anchor?anchor[1]+anchor[3]/2:0,shift=ax-mid;
-      subs.forEach((S,i)=>{const dx=off[i]+shift;S.nodes.forEach(n=>T.nodes.push([n[0],n[1]+dx,n[2]+ky,n[3]]));S.chain.forEach(c=>T.chain.push(c));
+      const mid=(off[0]+off[off.length-1])/2,ax=anchor?anchor[1]+anchor[3]/2:(T.ax||0),shift=ax-mid;
+      subs.forEach((S,i)=>{const dx=off[i]+shift;S.nodes.forEach(n=>T.nodes.push([n[0],n[1]+dx,n[2]+ky,n[3]]));(S.wives||[]).forEach(v=>(T.wives=T.wives||[]).push([v[0],v[1],v[2]+dx,v[3]+ky,v[4],v[5]]));S.chain.forEach(c=>T.chain.push(c));
         S.segs.forEach(c=>T.segs.push({y0:c.y0+ky,y1:c.y1+ky,l:c.l+dx,r:c.r+dx}))});
       // the connecting bar between the sons is part of the outline too
       const ay=anchor?anchor[2]:0;T.segs.push({y0:ay+BH,y1:ky,l:Math.min(ax,off[off.length-1]+shift)-4,r:Math.max(ax,off[0]+shift)+4});
     }
     return T}
   let x=0;roots.forEach(r=>{const T=build(r,0);const lo=Math.min(...T.segs.map(c=>c.l)),hi=Math.max(...T.segs.map(c=>c.r));
-    T.nodes.forEach(([id,nx,ny,w])=>pos[id]={x:nx-lo+x,y:ny,w});T.chain.forEach(c=>chainEdges.push(c));x+=hi-lo+60});
+    T.nodes.forEach(([id,nx,ny,w])=>pos[id]={x:nx-lo+x,y:ny,w});(T.wives||[]).forEach(([h,i,wx,wy,ww,w])=>{(WPOS[h]=WPOS[h]||[])[i]={x:wx-lo+x,y:wy,w:ww,key:w.key,name:w.name,tree:w.tree,hid:w.hid}});T.chain.forEach(c=>chainEdges.push(c));x+=hi-lo+60});
   // Bring a husband's small branch (e.g. Abu Talib → Ali) right beside his wife's line (Abdullah → Prophet ﷺ → Fatima)
   for(const wid in pos){const sid=P[wid].spouse;if(!sid||!pos[sid]||kids(sid).length)continue;
     const q=P[sid].parent,m=P[wid].parent,g=m&&P[m].parent;
@@ -593,11 +599,17 @@ function draw(){
   for(const id in pos){if(chained.has(id))continue;const ks=kids(id).filter(k=>pos[k]);if(!ks.length)continue;
     const p=pos[id],cx=p.x+p.w/2,y0=p.y+BH,my=y0+LEVEL/2;
     const cs=ks.map(k=>pos[k].x+pos[k].w/2);
-    const add=(d,me)=>{const e=document.createElementNS(NS,'path');e.setAttribute('d',d);e.setAttribute('class','edge'+(me?' me':''));eg.append(e)};
+    const add=(d,me,cl)=>{const e=document.createElementNS(NS,'path');e.setAttribute('d',d);e.setAttribute('class','edge'+(me?' me':'')+(cl||''));eg.append(e)};
+    const W=WPOS[id];
+    if(W&&W.length){const yy=p.y+BH/2;let prev=p.x;W.forEach(w=>{add(`M${prev} ${yy}H${w.x+w.w}`,false,' wedc');w.ox=(prev+w.x+w.w)/2;prev=w.x});
+      const grp={};ks.forEach((k,i)=>{const m=P[k].mother||(W.length===1?W[0].key:'');const gi=W.findIndex(w=>w.key===m);(grp[gi]=grp[gi]||[]).push(i)});
+      Object.keys(grp).forEach(gk=>{const gi=+gk,ox=gi<0?cx:W[gi].ox,ys=gi<0?y0:yy,idx=grp[gk],xs=idx.map(i=>cs[i]);
+        add(`M${ox} ${ys}V${my}M${Math.min(ox,...xs)} ${my}H${Math.max(ox,...xs)}`,false);
+        idx.forEach(i=>{const k=ks[i],me=meSet.has(k)&&meSet.has(id);add(`M${cs[i]} ${my}V${pos[k].y}`,me);if(me)add(`M${ox} ${ys}V${my}H${cs[i]}`,true)})});continue}
     add(`M${cx} ${y0}V${my}M${Math.min(cx,...cs)} ${my}H${Math.max(cx,...cs)}`,false);
     ks.forEach((k,i)=>{const me=meSet.has(k)&&meSet.has(id);add(`M${cs[i]} ${my}V${pos[k].y}`,me);if(me)add(`M${cx} ${y0}V${my}H${cs[i]}`,true)})}
   // marriage link (e.g. Hazrat Ali ↔ Hazrat Fatima): dashed gold line
-  for(const id in pos){const sp=P[id].spouse;if(!sp||!pos[sp])continue;const A=pos[sp],B=pos[id];
+  for(const id in pos){const sp=P[id].spouse;if(!sp||!pos[sp]||!kids(id).length)continue;const A=pos[sp],B=pos[id];
     const ax=A.x+A.w/2,ay=A.y+BH+(P[sp].note?18:0),by=B.y+BH/2,bx=B.x>ax?B.x:B.x+B.w;
     const e=document.createElementNS(NS,'path');e.setAttribute('d',`M${ax} ${ay}V${by}H${bx}`);e.setAttribute('class','edge wed');eg.append(e);
     const t=document.createElementNS(NS,'text');t.setAttribute('class','wedl');t.setAttribute('x',(ax+bx)/2);t.setAttribute('y',by-8);t.setAttribute('text-anchor','middle');t.textContent='نکاح';eg.append(t)}
@@ -610,6 +622,9 @@ function draw(){
     g.append(r,t);
     if(per.note){const n=document.createElementNS(NS,'text');n.setAttribute('class','note');n.setAttribute('x',p.x+p.w/2);n.setAttribute('y',p.y+BH+10);n.setAttribute('text-anchor','middle');n.textContent=per.note;g.append(n)}
     ng.append(g)}
+  for(const h in WPOS)WPOS[h].forEach(w=>{if(!w)return;const g=document.createElementNS(NS,'g');g.setAttribute('class','node wife'+(w.hid?' hid':'')+(sel===(w.tree?w.key:'')?' sel':''));g.dataset.id=w.tree?w.key:h;
+    const r=document.createElementNS(NS,'rect');r.setAttribute('x',w.x);r.setAttribute('y',w.y);r.setAttribute('width',w.w);r.setAttribute('height',BH);r.setAttribute('rx',10);
+    const t=document.createElementNS(NS,'text');t.setAttribute('class','nm');t.setAttribute('x',w.x+w.w/2);t.setAttribute('y',w.y+BH/2+8);t.setAttribute('text-anchor','middle');t.textContent=w.name;g.append(r,t);ng.append(g)});
   apply();
   $('#empty').hidden=Object.keys(P).length>0;
 }
@@ -649,6 +664,11 @@ function relText(id){const p=P[id];const f=P[p.parent];const wife=Object.keys(P)
   const sons=ks.filter(k=>P[k].g!=='f'),daus=ks.filter(k=>P[k].g==='f');const L=a=>a.map(k=>`<span class="ur">${esc(label(P[k])||'(blank)')}</span>`).join('، ');
   return `${p.g==='f'?'Daughter':'Son'} of <span class="ur">${esc(fn)}</span><br>Sons: ${sons.length?L(sons):'none recorded'}${daus.length?'<br>Daughters: '+L(daus):''}`}
 
+const WGAP=34;
+// wives shown beside a man in the tree: wives kept by name, and wives in the tree who have no children under their own name
+function wivesShown(id){const p=P[id];if(!p||p.g==='f')return[];const L=[];
+  for(const k in P)if(P[k].spouse===id&&!kids(k).length)L.push({key:k,name:label(P[k])||'—',tree:1,hid:P[k].hid?1:0});
+  (p.wives||[]).forEach(w=>L.push({key:'w:'+w.name,name:w.name,hid:canWrite&&!w.show?1:0}));return L}
 function wivesOf(id){const L=Object.keys(P).filter(k=>P[k].spouse===id).map(k=>({key:k,name:label(P[k])||'—',tree:1}));
   ((P[id]&&P[id].wives)||[]).forEach(w=>L.push({key:'w:'+w.name,name:w.name,show:w.show}));return L}
 function motherOf(id){const p=P[id];if(!p)return null;if(p.mother)return p.mother.startsWith('w:')?p.mother.slice(2):(P[p.mother]?label(P[p.mother]):null);

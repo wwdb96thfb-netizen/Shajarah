@@ -164,6 +164,7 @@ body.pickmode .panel{display:none}
 body.pickmode .banner{top:10px;font-size:1rem;padding:12px 16px;width:calc(100% - 32px);justify-content:space-between;box-sizing:border-box}
 .phead{display:flex;align-items:center;justify-content:space-between}
 .pill{flex:none}
+.pill[hidden]{display:none!important}
 .app{height:100%}
 .bar{padding-top:max(8px,env(safe-area-inset-top,0px))}
 .pill{font-size:.8rem;font-weight:600;padding:5px 10px;border-radius:999px;border:1px solid var(--rule);background:var(--card);color:var(--muted);cursor:pointer;white-space:nowrap}
@@ -498,7 +499,7 @@ async function sync(){if(syncing||!cfg.c||(ME&&ME.owner&&!PIN))return;syncing=tr
     else{const j=await api('/api/tree?v='+(DATA&&DATA.ver||''));if(!j.same){setData(j);rebuild()}else setMe(j.me)}
     showApp()}
   catch(e){}finally{syncing=false;pill()}}
-function pill(){const b=$('#syncPill'),n=OUT.length;
+function pill(){const b=$('#syncPill'),n=OUT.length;b.hidden=!n;
   if(n){b.className='pill wait';b.textContent=(navigator.onLine?'Sending… ':'Offline · ')+n+' waiting'}
   else if(!navigator.onLine||!server){b.className='pill off';b.textContent=navigator.onLine?'Not connected':'Offline'}
   else{b.className='pill ok';b.textContent='● Up to date'}}
@@ -549,7 +550,7 @@ $('#copyLink').onclick=async()=>{const L=location.origin+location.pathname+'?t='
 $('#noInstall').onclick=()=>{keep('noinst',1);start()};
 
 // ---- version and manual update
-const APP_VER=16, BUILD_DATE='19 Oct 2026';
+const APP_VER=17, BUILD_DATE='19 Oct 2026';
 $('#verTxt').textContent='Shajarah · Version 1.'+APP_VER+' · '+BUILD_DATE;
 $('#updBtn').onclick=async()=>{toast('Updating…');try{const r=await navigator.serviceWorker.getRegistration();if(r)await r.update()}catch(e){}
   try{const ks=await caches.keys();await Promise.all(ks.filter(k=>k.indexOf('sj-')===0).map(k=>caches.delete(k)))}catch(e){}

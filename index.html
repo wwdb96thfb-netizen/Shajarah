@@ -258,6 +258,8 @@ body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
       <button type="button" id="usersBtn" hidden>People &amp; links</button>
       <button type="button" id="histBtn" hidden>History</button>
       <button type="button" id="pushBtn" hidden>🔔 Turn on notifications</button>
+      <button type="button" id="updBtn">⟳ Update app</button>
+      <div class="meta" id="verTxt" style="padding:4px 14px 8px"></div>
     </div>
   </div>
   <div class="instbar" id="instBar" hidden><span>Put Shajarah on your home screen</span><button type="button" id="instGo">Install</button></div>
@@ -492,6 +494,12 @@ $('#copyLink').onclick=async()=>{const L=location.origin+location.pathname+'?t='
   try{await navigator.clipboard.writeText(L);$('#copyLink').textContent='Copied ✓'}catch(e){$('#copyLink').textContent='Could not copy — use the link you were sent'}};
 $('#noInstall').onclick=()=>{keep('noinst',1);start()};
 
+// ---- version and manual update
+const APP_VER=11;
+$('#verTxt').textContent='App version '+APP_VER;
+$('#updBtn').onclick=async()=>{toast('Updating…');try{const r=await navigator.serviceWorker.getRegistration();if(r)await r.update()}catch(e){}
+  try{const ks=await caches.keys();await Promise.all(ks.filter(k=>k.indexOf('sj-')===0).map(k=>caches.delete(k)))}catch(e){}
+  setTimeout(()=>location.reload(),600)};
 // ---- menu, search, closing the details
 const menuOpen=on=>{$('#menu').hidden=!on;$('#menuBtn').setAttribute('aria-expanded',on?'true':'false')};
 $('#menuBtn').onclick=e=>{e.stopPropagation();$('#searchBox').hidden=true;menuOpen($('#menu').hidden)};

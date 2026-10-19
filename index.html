@@ -152,6 +152,8 @@ input,textarea,select{font-size:16px!important}
 .chain li{cursor:pointer}.chain li::marker{font-family:var(--ui);font-size:.75rem;color:var(--muted)}
 .edge.me{stroke:var(--pro);stroke-width:3.4}
 .node.me rect{stroke:var(--pro);stroke-width:3}
+.wf{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 0}.wf .ur{font-family:var(--ur);font-size:1.05rem;color:var(--fg)}
+.wf button,#motherRow button{padding:4px 10px!important;font-size:.85rem}
 .phead{display:flex;align-items:center;justify-content:space-between}
 .pill{flex:none}
 .app{height:100%}
@@ -308,6 +310,13 @@ body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
         <div id="secMore" style="display:flex;flex-direction:column;gap:12px"><h2>More</h2>
           <div class="row"><span class="meta" style="align-self:center">Highlight:</span><button type="button" id="hlN">None</button><button type="button" id="hlK">Important</button><button type="button" id="hlP">Prophet</button></div>
           <div class="row"><span class="meta" style="align-self:center">This person is a:</span><button type="button" id="gM">Son</button><button type="button" id="gF">Daughter</button></div>
+          <section class="box" id="coupleBox">
+            <h3 id="coupleTitle">Wife</h3>
+            <div id="coupleList" class="meta"></div>
+            <button type="button" id="pickSpouse">Pick from the tree</button>
+            <div class="row" id="wifeTypeRow"><input id="wifeName" type="text" dir="auto" placeholder="Or type her name (if she is not in the Shajarah)" style="flex:1 1 200px;min-width:0;font-family:var(--ur);padding:6px 10px;border-radius:8px;border:1px solid var(--rule);background:var(--bg);color:var(--fg);direction:rtl"><button type="button" id="wifeAdd">Add wife</button></div>
+            <div id="motherRow" class="row"></div>
+          </section>
           <div class="row"><span class="meta" style="align-self:center">Family can see:</span><button type="button" id="visShow">Show</button><button type="button" id="visHide">Hide</button></div>
           <div class="hidnote" id="hidNote" hidden></div>
           <div class="row">
@@ -637,10 +646,34 @@ function relText(id){const p=P[id];const f=P[p.parent];const wife=Object.keys(P)
   const sons=ks.filter(k=>P[k].g!=='f'),daus=ks.filter(k=>P[k].g==='f');const L=a=>a.map(k=>`<span class="ur">${esc(label(P[k])||'(blank)')}</span>`).join('، ');
   return `${p.g==='f'?'Daughter':'Son'} of <span class="ur">${esc(fn)}</span><br>Sons: ${sons.length?L(sons):'none recorded'}${daus.length?'<br>Daughters: '+L(daus):''}`}
 
+function wivesOf(id){const L=Object.keys(P).filter(k=>P[k].spouse===id).map(k=>({key:k,name:label(P[k])||'—',tree:1}));
+  ((P[id]&&P[id].wives)||[]).forEach(w=>L.push({key:'w:'+w.name,name:w.name,show:w.show}));return L}
+function motherOf(id){const p=P[id];if(!p)return null;if(p.mother)return p.mother.startsWith('w:')?p.mother.slice(2):(P[p.mother]?label(P[p.mother]):null);
+  const w=p.parent?wivesOf(p.parent):[];return w.length===1?w[0].name:null}
+function relFull(id){let t=relText(id);const m=motherOf(id),p=P[id];
+  if(m)t=t.replace('</span><br>','</span> and <span class="ur">'+esc(m)+'</span><br>');
+  const w=wivesOf(id);if(w.length&&p.g!=='f')t+='<br>'+(w.length>1?'Wives':'Wife')+': '+w.map(x=>'<span class="ur">'+esc(x.name)+'</span>').join('، ');
+  if(p.g==='f'&&p.spouse&&P[p.spouse])t+='<br>Husband: <span class="ur">'+esc(label(P[p.spouse]))+'</span>';return t}
+function drawCouple(id){const p=P[id],fem=p.g==='f';$('#coupleTitle').textContent=fem?'Husband':'Wife / wives';$('#wifeTypeRow').hidden=fem;
+  $('#pickSpouse').textContent=fem?'Pick her husband from the tree':'Pick his wife from the tree';
+  let h='';if(fem){if(p.spouse&&P[p.spouse])h=`<div class="wf"><span class="ur">${esc(label(P[p.spouse]))}</span><button type="button" data-unlink="${esc(id)}">Remove</button></div>`}
+  else wivesOf(id).forEach(w=>{h+=`<div class="wf"><span class="ur">${esc(w.name)}</span>${w.tree?'<span class="meta">(in the Shajarah)</span>':`<label class="meta"><input type="checkbox" data-wshow="${esc(w.name)}" ${w.show?'checked':''}> family can see</label>`}<button type="button" ${w.tree?`data-unlink="${esc(w.key)}"`:`data-wdel="${esc(w.name)}"`}>Remove</button></div>`});
+  $('#coupleList').innerHTML=h||'<span class="meta">None recorded.</span>';
+  const opts=p.parent?wivesOf(p.parent):[];
+  $('#motherRow').innerHTML=opts.length?'<span class="meta" style="align-self:center">Mother:</span>'+opts.map(w=>`<button type="button" data-mother="${esc(w.key)}" class="${p.mother===w.key?'on':''}">${esc(w.name)}</button>`).join('')+`<button type="button" data-mother="" class="${!p.mother?'on':''}">Not set</button>`:''}
+let spousePicking=null;
+$('#pickSpouse').onclick=()=>{if(!sel)return;spousePicking=sel;cvEl.classList.add('picking');$('#bannerTxt').textContent=P[sel].g==='f'?'Now tap her husband':'Now tap his wife';$('#banner').hidden=false};
+$('#wifeAdd').onclick=()=>{const n=$('#wifeName').value.trim();if(!sel||!n)return;const w=((P[sel].wives)||[]).map(x=>({name:x.name,show:x.show?1:0}));if(w.some(x=>x.name===n))return;w.push({name:n,show:0});
+  queue({op:'set',id:sel,f:{wives:w}});$('#wifeName').value='';msg('Wife added')};
+$('#coupleBox').addEventListener('click',e=>{const t=e.target;if(!sel)return;
+  if(t.dataset.unlink){const who=t.dataset.unlink;queue({op:'set',id:who===sel?sel:who,f:{spouse:''}});msg('Removed')}
+  else if(t.dataset.wdel){const w=((P[sel].wives)||[]).filter(x=>x.name!==t.dataset.wdel).map(x=>({name:x.name,show:x.show?1:0}));queue({op:'set',id:sel,f:{wives:w}});msg('Removed')}
+  else if('mother' in t.dataset){queue({op:'set',id:sel,f:{mother:t.dataset.mother}});msg('Mother recorded')}});
+$('#coupleBox').addEventListener('change',e=>{const n=e.target.dataset.wshow;if(!n||!sel)return;const w=((P[sel].wives)||[]).map(x=>({name:x.name,show:x.name===n?(e.target.checked?1:0):(x.show?1:0)}));queue({op:'set',id:sel,f:{wives:w}})});
 function select(id){sel=id;delArm=false;$('#delBtn').textContent='Delete';msg('');
   $('#pEmpty').hidden=!!id;$('#pBody').hidden=!id;
   if(id){const p=P[id];$('#who').textContent=label(p)||'(blank — unclear name)';$('#who').className='who'+(label(p)?'':' blank');
-    $('#rel').innerHTML=relText(id)+(p.local?'<br><b>Saved on this phone — it will be sent (and written in Urdu) when online.</b>':'');
+    $('#rel').innerHTML=relFull(id)+(p.local?'<br><b>Saved on this phone — it will be sent (and written in Urdu) when online.</b>':'');
     $('#fName').value=p.name||'';$('#fNote').value=p.note||'';$('#fSon').value='';$('#addTo').textContent=label(p)||'(blank)';
     const g=$('#guess');if(p.guess&&!label(p)){g.hidden=false;g.innerHTML=`Earlier reading (not certain): <span class="ur">${esc(p.guess)}</span>`}else g.hidden=true;
     const hasKids=kids(id).length>0,pend=!!p.pend,own=!canWrite&&pend&&!!p.mine;
@@ -654,11 +687,15 @@ function select(id){sel=id;delArm=false;$('#delBtn').textContent='Delete';msg(''
     $('#delBtn').hidden=!(canWrite&&!pend);$('#delBtn').disabled=hasKids;$('#delBtn').title=hasKids?'Remove or move the children first':'';
     if(id!==pathFor){$('#secPath').hidden=true;$('#pathBtn').hidden=id===PROPHET}
     if(!sugPicking&&sugFather&&$('#sugPicked').dataset.for!==id){sugFather=null;$('#sugPicked').textContent=''}$('#sugPicked').dataset.for=id;
+    if(canWrite&&!pend)drawCouple(id);
     $('#hidNote').hidden=!p.hid;$('#hidNote').textContent=p.hid===1?'Hidden from family (only you see this name).':p.hid===2?'Hidden from family because a parent above is hidden.':'';
     $('#visShow').classList.toggle('on',canWrite&&!p.hid);$('#visHide').classList.toggle('on',canWrite&&p.hid===1);
     setKind(sugKind)}
   document.querySelectorAll('.node').forEach(n=>n.classList.toggle('sel',n.dataset.id===id))}
 function tapNode(id){if(picking){finishPick(id);return}
+  if(spousePicking){const a=spousePicking;spousePicking=null;$('#cancelPick').click();if(id===a){select(a);return}
+    if((P[a].g==='f')===(P[id].g==='f')){select(a);msg(P[a].g==='f'?'Pick a man as her husband.':'Pick a woman as his wife.',true);return}
+    const wife=P[a].g==='f'?a:id,hus=P[a].g==='f'?id:a;queue({op:'set',id:wife,f:{spouse:hus}});select(a);msg('Linked as husband and wife');return}
   if(sugPicking){const who=sugPicking;sugPicking=null;$('#cancelPick').click();if(id===who||ancestors(id).has(who)){select(who);msg('That cannot be his father.',true);return}
     sugFather=id;select(who);setKind('father');$('#sugPicked').innerHTML='Correct father: <span class="ur">'+esc(label(P[id])||'—')+'</span>';return}
   select(id)}
@@ -683,7 +720,7 @@ $('#hlN').onclick=()=>setF({star:''},'Highlight removed');$('#hlK').onclick=()=>
 $('#visShow').onclick=()=>setF({vis:'show'},'Shown to family');$('#visHide').onclick=()=>setF({vis:'hide'},'Hidden from family');
 $('#gM').onclick=()=>setF({g:'m'},'Marked as son');$('#gF').onclick=()=>setF({g:'f'},'Marked as daughter');
 $('#chFather').onclick=()=>{if(!sel)return;picking=sel;cvEl.classList.add('picking');$('#bannerTxt').textContent=`Now tap the correct father of ${label(P[sel])||'this person'}`;$('#banner').hidden=false};
-$('#cancelPick').onclick=()=>{picking=null;sugPicking=null;cvEl.classList.remove('picking');$('#banner').hidden=true};
+$('#cancelPick').onclick=()=>{picking=null;sugPicking=null;spousePicking=null;cvEl.classList.remove('picking');$('#banner').hidden=true};
 function finishPick(fid){const child=picking;$('#cancelPick').click();
   if(fid===child){msg('A person can’t be his own father.',true);return}
   if(ancestors(fid).has(child)){msg('That would make him his own ancestor.',true);return}

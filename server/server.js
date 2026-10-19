@@ -7,7 +7,7 @@
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto'), os = require('os');
 const { spawn } = require('child_process');
 
-const VERSION = 3;
+const VERSION = 4;
 const ROOT = __dirname, DATA = path.join(ROOT, 'data'), BACK = path.join(DATA, 'backups');
 const CFG = path.join(DATA, 'config.json'), TREE = path.join(DATA, 'tree.json'), HIST = path.join(DATA, 'history.jsonl');
 const APP_URL = process.env.SJ_APP_URL || 'https://wwdb96thfb-netizen.github.io/Shajarah/';
@@ -143,6 +143,12 @@ async function applyOps(user, ops) {
   // convert every English name in this batch in one go
   const texts = ops.filter(o => o && (o.op === 'add' || o.op === 'edit') && typeof o.name === 'string').map(o => clip(o.name, 80));
   const conv = texts.some(hasLatin) ? await toUrduAll(texts) : texts; let ci = 0;
+  // wives' names typed in English are changed to Urdu too
+  for (const o of ops) if (o && o.op === 'set' && o.f && Array.isArray(o.f.wives) && o.f.wives.some(w => w && hasLatin(String(w.name || '')))) {
+    const u = await toUrduAll(o.f.wives.map(w => clip(w && w.name, 80))); o.f.wives = o.f.wives.map((w, i) => Object.assign({}, w, { name: u[i] }));
+  }
+  // a mother kept by name follows the Urdu spelling of the wife
+  for (const o of ops) if (o && o.op === 'set' && o.f && typeof o.f.mother === 'string' && o.f.mother.startsWith('w:') && hasLatin(o.f.mother)) { const [u] = await toUrduAll([o.f.mother.slice(2)]); o.f.mother = 'w:' + u; }
   let changed = false;
   for (const o of ops) {
     if (!o || typeof o !== 'object') { out.push({ error: 'bad' }); continue; }
@@ -210,7 +216,11 @@ function applyOne(user, o, urdu) {
     if ('order' in f && !('parent' in f)) x.order = Number(f.order) || 0;
     if ('g' in f) { x.g = f.g === 'f' ? 'f' : 'm'; history('owner', 'changed son/daughter', o.id, '', x.g === 'f' ? 'daughter' : 'son'); }
     if ('star' in f) x.star = ['p', 'k'].indexOf(f.star) >= 0 ? f.star : '';
-    if ('spouse' in f) x.spouse = P[f.spouse] ? f.spouse : '';
+    if ('spouse' in f) { const was = x.spouse; x.spouse = P[f.spouse] && f.spouse !== o.id ? f.spouse : ''; if (was !== x.spouse) history('owner', x.spouse ? 'linked as husband and wife' : 'unlinked husband and wife', o.id, nameOf(was), nameOf(x.spouse)); }
+    // wives who are not in the tree are kept by name on the husband
+    if ('wives' in f) { x.wives = (Array.isArray(f.wives) ? f.wives : []).slice(0, 6).map(w => ({ name: clip(w && w.name, 80), show: w && w.show ? 1 : 0 })).filter(w => w.name); history('owner', 'wives recorded', o.id, '', x.wives.map(w => w.name).join('، ')); }
+    // a child's mother: a wife in the tree (her id) or a wife kept by name ("w:" + name)
+    if ('mother' in f) { const m = String(f.mother || ''); x.mother = (P[m] || /^w:.{1,80}$/.test(m)) ? m : ''; }
     if ('vis' in f) { if (f.vis === 'show') { x.show = 1; delete x.hide; } else { x.hide = 1; delete x.show; } history('owner', f.vis === 'show' ? 'shown to family' : 'hidden from family', o.id, '', x.name); }
     return { changed: true };
   }
@@ -246,7 +256,9 @@ function hiddenSet() { const H = new Set(), P = tree.people;
 function treeFor(user) {
   const people = {}, H = hiddenSet();
   for (const k in tree.people) { const x = tree.people[k];
-    if (!user.owner && H.has(k) && !(x.status === 'pending' && x.added_code === idOf(user.code))) continue; people[k] = { name: x.name, parent: x.parent, order: x.order, g: x.g || '', note: x.note || '', star: x.star || '', spouse: x.spouse || '', guess: x.guess || '',
+    if (!user.owner && H.has(k) && !(x.status === 'pending' && x.added_code === idOf(user.code))) continue;
+    const wv = (x.wives || []).filter(w => user.owner || w.show), mo = String(x.mother || ''), moOk = !mo ? '' : mo.startsWith('w:') ? (user.owner || (tree.people[x.parent] && (tree.people[x.parent].wives || []).some(w => w.show && 'w:' + w.name === mo)) ? mo : '') : (user.owner || !H.has(mo) ? mo : '');
+    people[k] = { wives: wv.map(w => user.owner ? w : { name: w.name }), mother: moOk, name: x.name, parent: x.parent, order: x.order, g: x.g || '', note: x.note || '', star: x.star || '', spouse: x.spouse || '', guess: x.guess || '',
     pend: x.status === 'pending' ? 1 : 0, by: x.status === 'pending' ? x.added_by : '', mine: x.status === 'pending' && x.added_code === idOf(user.code) ? 1 : 0 }; if (user.owner && H.has(k)) people[k].hid = hiddenOf(x) ? 1 : 2; }
   const o = { ok: true, ver: tree.ver, people, start: tree.start || 'p0084', me: { name: user.name, role: user.role, owner: !!user.owner } };
   if (user.owner) o.suggestions = tree.suggestions.filter(s => !s.done);

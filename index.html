@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Shajarah</title>
 <meta name="theme-color" content="#163a2a">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -131,6 +131,23 @@ input,textarea{-webkit-user-select:text;user-select:text}
 .byname{font:inherit;padding:6px 10px;border-radius:8px;border:1px solid var(--rule);background:var(--bg);color:var(--fg)}
 
 .app[hidden]{display:none!important}
+html,body{margin:0;height:100%;height:100dvh;overflow:hidden;overscroll-behavior:none;touch-action:manipulation;-webkit-text-size-adjust:100%}
+.app{height:100dvh}
+input,textarea,select{font-size:16px!important}
+.bar{flex-wrap:nowrap;position:relative;gap:6px;padding-top:max(6px,env(safe-area-inset-top,0px));padding-bottom:6px}
+.bar h1{font-size:1.15rem;line-height:1.9;margin:0;white-space:nowrap}
+.barlogo{width:30px;height:30px;border-radius:7px}
+.bar .ib,.panel .ib{width:40px;height:40px;padding:0;display:grid;place-items:center;border-radius:10px;border:1px solid var(--rule);background:var(--card);color:var(--fg);position:relative;flex:none;font-size:1rem}
+.ib .dot{position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%;background:var(--sel)}
+.bar .search{position:absolute;left:0;right:0;top:100%;max-width:none;padding:8px max(12px,env(safe-area-inset-left,0px));background:var(--bg);border-bottom:1px solid var(--rule);z-index:30}
+.bar .search input{line-height:2}
+.menu{position:absolute;right:max(10px,env(safe-area-inset-right,0px));top:calc(100% + 4px);z-index:40;background:var(--card);border:1px solid var(--rule);border-radius:12px;box-shadow:0 10px 30px rgb(0 0 0 / .18);padding:6px;display:flex;flex-direction:column;min-width:240px}
+.menu[hidden]{display:none}
+.menu button{border:0!important;background:none!important;text-align:left;padding:12px 14px!important;border-radius:8px!important;font-weight:600;color:var(--fg)!important}
+.menu button.on{background:var(--accent-soft)!important}
+.menu button.has{color:#7a5410!important}
+.phead{display:flex;align-items:center;justify-content:space-between}
+.pill{flex:none}
 .app{height:100%}
 .bar{padding-top:max(8px,env(safe-area-inset-top,0px))}
 .pill{font-size:.8rem;font-weight:600;padding:5px 10px;border-radius:999px;border:1px solid var(--rule);background:var(--card);color:var(--muted);cursor:pointer;white-space:nowrap}
@@ -166,6 +183,13 @@ body.ro.away #app,body.ro.away .modal{filter:blur(28px)}
 .hidnote{font-size:.85rem;color:var(--warn);font-weight:600}
 body.ro{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
+@media (max-width:760px){
+  .panel{max-height:48dvh;padding-top:10px;box-shadow:0 -6px 18px rgb(0 0 0 / .08)}
+  #pEmpty{font-size:.82rem}#pEmpty .wide{display:none}
+  .bar h1{font-size:1.05rem}
+  .zoom{bottom:10px}
+  .zoom button{width:38px;height:38px}
+}
 @media print{body.ro *{display:none!important}body.ro::after{content:"Printing the Shajarah is not allowed.";display:block;padding:40px;font:20px sans-serif}}
 </style>
 </head><body class="ro">
@@ -208,16 +232,21 @@ body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
 
 <div class="app" id="app" hidden>
   <div class="bar">
+    <img class="barlogo" src="icon-192.png" alt="">
     <h1>شجرۃ الطیبہ</h1>
-    <div class="search"><input id="q" type="search" placeholder="نام تلاش کریں / search" aria-label="Search a name"><div class="results" id="res" hidden></div></div>
     <span class="grow"></span>
     <button type="button" class="pill" id="syncPill" title="Tap to send now">…</button>
-    <button type="button" id="vStart" class="on" title="Start from Syed Muazzam Shah (Jalalia)">From Jalalia</button>
-    <button type="button" id="vAll" title="Whole lineage from Hazrat Adam">Full lineage</button>
-    <button type="button" id="pendList" hidden>New entries</button>
-    <button type="button" id="sugList" hidden>Suggestions</button>
-    <button type="button" id="usersBtn" hidden>People</button>
-    <button type="button" id="histBtn" hidden>History</button>
+    <button type="button" class="ib" id="searchBtn" aria-label="Search a name"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5 21 21" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
+    <button type="button" class="ib" id="menuBtn" aria-label="Menu" aria-expanded="false"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><i class="dot" id="menuDot" hidden></i></button>
+    <div class="search" id="searchBox" hidden><input id="q" type="search" placeholder="نام تلاش کریں / search a name" aria-label="Search a name"><div class="results" id="res" hidden></div></div>
+    <div class="menu" id="menu" hidden>
+      <button type="button" id="vStart" class="on">From Jalalia</button>
+      <button type="button" id="vAll">Full lineage (from Hazrat Adam)</button>
+      <button type="button" id="pendList" hidden>New entries</button>
+      <button type="button" id="sugList" hidden>Suggestions</button>
+      <button type="button" id="usersBtn" hidden>People &amp; links</button>
+      <button type="button" id="histBtn" hidden>History</button>
+    </div>
   </div>
   <div class="instbar" id="instBar" hidden><span>Put Shajarah on your home screen</span><button type="button" id="instGo">Install</button></div>
   <div class="main">
@@ -230,9 +259,9 @@ body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
       <svg class="wm" id="wm" aria-hidden="true" hidden><defs><pattern id="wmp" width="360" height="200" patternUnits="userSpaceOnUse" patternTransform="rotate(-25)"><text id="wmt" x="10" y="100"></text></pattern></defs><rect width="100%" height="100%" fill="url(#wmp)"/></svg>
     </div>
     <aside class="panel" id="panel">
-      <div id="pEmpty" class="meta"><b>Tap any name</b> to see his family<span id="pEmptyAdd">, add his sons and daughters</span>, or to tell Iftikhar if something is wrong.<br><br>Names with a dotted border are new entries waiting for approval.</div>
+      <div id="pEmpty" class="meta"><b>Tap any name</b> to see his family<span id="pEmptyAdd">, add his sons and daughters</span>, or to tell Iftikhar if something is wrong. <span class="wide">Names with a dotted border are new entries waiting for approval.</span></div>
       <div id="pBody" hidden style="display:flex;flex-direction:column;gap:12px">
-        <h2>Selected</h2>
+        <div class="phead"><h2>Selected</h2><button type="button" class="ib" id="closeSel" aria-label="Close">✕</button></div>
         <div class="who" id="who"></div>
         <div class="meta" id="rel"></div>
         <section class="box addbox" id="secAdd">
@@ -373,8 +402,9 @@ function applyLocal(base){const M={};for(const k in base)M[k]=Object.assign({},b
     else if((o.op==='reject'||o.op==='delete')&&x)delete M[o.id]});
   return M}
 function rebuild(){P=applyLocal(DATA?DATA.people:{});settings={start:DATA&&DATA.start||'p0084'};pill();
-  if(!Object.keys(P).length)return;$('#empty').hidden=true;if(viewMode==='start')viewRoot=settings.start;draw();if(first){first=false;fit()}
+  if(!Object.keys(P).length)return;$('#empty').hidden=true;if(viewMode==='start')viewRoot=settings.start;draw();if(first){first=false;firstView()}
   if(sel&&P[sel])select(sel);else if(sel)select(null);if(canWrite)pendCount()}
+function firstView(){const r=viewRoot||settings.start;if(innerWidth<760&&pos[r])centerOn(r,0.8);else fit()}
 function setData(j){DATA={ver:j.ver,people:j.people,start:j.start,me:j.me,suggestions:j.suggestions||[]};keep('tree',DATA);setMe(j.me)}
 function setMe(me){ME=me;canWrite=!!(me&&me.owner);canAdd=canWrite||(me&&me.role==='family');document.body.classList.toggle('ro',!canWrite);
   ['pendList','sugList','usersBtn','histBtn'].forEach(b=>$('#'+b).hidden=!canWrite);$('#pEmptyAdd').hidden=!canAdd;watermark()}
@@ -437,6 +467,18 @@ $('#copyLink').onclick=async()=>{const L=location.origin+location.pathname+'?t='
   try{await navigator.clipboard.writeText(L);$('#copyLink').textContent='Copied ✓'}catch(e){$('#copyLink').textContent='Could not copy — use the link you were sent'}};
 $('#noInstall').onclick=()=>{keep('noinst',1);start()};
 
+// ---- menu, search, closing the details
+const menuOpen=on=>{$('#menu').hidden=!on;$('#menuBtn').setAttribute('aria-expanded',on?'true':'false')};
+$('#menuBtn').onclick=e=>{e.stopPropagation();$('#searchBox').hidden=true;menuOpen($('#menu').hidden)};
+$('#menu').addEventListener('click',e=>{if(e.target.closest('button'))menuOpen(false)});
+document.addEventListener('pointerdown',e=>{if(!e.target.closest('#menu,#menuBtn'))menuOpen(false);if(!e.target.closest('#searchBox,#searchBtn'))$('#searchBox').hidden=true});
+$('#searchBtn').onclick=e=>{e.stopPropagation();menuOpen(false);const b=$('#searchBox');b.hidden=!b.hidden;if(!b.hidden)setTimeout(()=>$('#q').focus(),30)};
+$('#closeSel').onclick=()=>select(null);
+// ---- only the tree zooms; the app itself never zooms
+['gesturestart','gesturechange','gestureend'].forEach(t=>document.addEventListener(t,e=>e.preventDefault(),{passive:false}));
+document.addEventListener('touchmove',e=>{if(e.touches.length>1&&!e.target.closest('#cv'))e.preventDefault()},{passive:false});
+document.addEventListener('wheel',e=>{if(e.ctrlKey&&!e.target.closest('#cv'))e.preventDefault()},{passive:false});
+let lastTouch=0;document.addEventListener('touchend',e=>{const n=Date.now();if(n-lastTouch<320&&!e.target.closest('input,textarea'))e.preventDefault();lastTouch=n},{passive:false});
 // ---- watermark, no printing, no copying (for everyone except the owner)
 function watermark(){const on=!canWrite&&ME&&ME.name;$('#wm').toggleAttribute('hidden',!on);if(on)$('#wmt').textContent=ME.name+' · '+new Date().toISOString().slice(0,10)+' · '+ME.name}
 document.addEventListener('contextmenu',e=>{if(!canWrite)e.preventDefault()});
@@ -646,11 +688,11 @@ $('#q').addEventListener('input',()=>{const q=$('#q').value.trim();const box=$('
   const hits=Object.keys(P).filter(k=>(P[k].name||'').includes(q)||(P[k].guess||'').includes(q)).slice(0,25);
   box.innerHTML=hits.length?hits.map(k=>{const f=P[P[k].parent];return `<button type="button" data-id="${k}">${esc(label(P[k])||P[k].guess+' ؟')}<small>${P[k].g==='f'?'daughter':'son'} of ${esc(f?label(f)||'—':'—')}</small></button>`}).join(''):'<div class="meta" style="padding:8px 12px">No match</div>';
   box.hidden=false});
-$('#res').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const id=b.dataset.id;$('#res').hidden=true;$('#q').value='';
+$('#res').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const id=b.dataset.id;$('#res').hidden=true;$('#q').value='';$('#searchBox').hidden=true;$('#q').blur();
   if(!pos[id]){viewMode='all';viewRoot=null;setModeButtons();draw()}select(id);centerOn(id,Math.max(T.k,0.8))});
 
 // ---- owner: new entries, suggestions, people, history
-function pendCount(){const n=Object.keys(P).filter(k=>P[k].pend).length,b=$('#pendList');b.textContent=n?`New entries (${n})`:'New entries';b.classList.toggle('has',!!n);
+function pendCount(){const n=Object.keys(P).filter(k=>P[k].pend).length,b=$('#pendList');b.textContent=n?`New entries (${n})`:'New entries';b.classList.toggle('has',!!n);$('#menuDot').hidden=!n;
   const s=(DATA&&DATA.suggestions||[]).filter(x=>!OUT.some(o=>o.op==='resolve'&&o.sid===x.sid)).length;$('#sugList').textContent=s?`Suggestions (${s})`:'Suggestions'}
 function modal(title,html){$('#sugTitle').textContent=title;$('#sugBody').innerHTML=html;$('#sugM').hidden=false}
 $('#sugX').onclick=()=>{$('#sugM').hidden=true};

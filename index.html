@@ -548,7 +548,7 @@ $('#copyLink').onclick=async()=>{const L=location.origin+location.pathname+'?t='
 $('#noInstall').onclick=()=>{keep('noinst',1);start()};
 
 // ---- version and manual update
-const APP_VER=14, BUILD_DATE='19 Oct 2026';
+const APP_VER=15, BUILD_DATE='19 Oct 2026';
 $('#verTxt').textContent='Shajarah · Version 1.'+APP_VER+' · '+BUILD_DATE;
 $('#updBtn').onclick=async()=>{toast('Updating…');try{const r=await navigator.serviceWorker.getRegistration();if(r)await r.update()}catch(e){}
   try{const ks=await caches.keys();await Promise.all(ks.filter(k=>k.indexOf('sj-')===0).map(k=>caches.delete(k)))}catch(e){}
@@ -787,7 +787,10 @@ function tapNode(id){if(picking){finishPick(id);return}
     else{newPid=id;$('#uWhoName').innerHTML='He is: <span class="ur">'+esc(label(P[id]))+'</span>';$('#usrM').hidden=false}return}
   if(motherPick){const c=motherPick;motherPick=null;$('#cancelPick').click();const f=P[c]&&P[c].parent;
     if(!f||id===c||id===f){select(c);toast('That cannot be his mother.',true);return}
-    if(P[id].g!=='f'){select(c);toast('Tap a woman’s name. If his mother is not in the tree, type her name instead.',true);return}
+    if(P[id].g!=='f'){select(c);
+      modal('Is this his mother?',`<p><span class="ur" style="font-size:1.2rem">${esc(label(P[id])||'—')}</span> is recorded as a <b>son</b> of <span class="ur">${esc(label(P[P[id].parent]||{})||'—')}</span>.</p>
+        <p>If this is actually a woman (his mother), the old record was wrong. Correct it and link her as mother?</p>
+        <div class="row"><button type="button" class="primary" data-fixmother="${esc(id)}" data-child="${esc(c)}">Yes — she is a woman, link as mother</button><button type="button" data-close="1">No</button></div>`);return}
     OUT.push({op:'set',id,f:{spouse:f}});OUT.push({op:'set',id:c,f:{mother:id}});keep('out',OUT);rebuild();sync();select(c);toast('Mother linked: '+label(P[id]));return}
   if(spousePicking){const a=spousePicking;spousePicking=null;$('#cancelPick').click();if(id===a){select(a);return}
     if((P[a].g==='f')===(P[id].g==='f')){select(a);toast(P[a].g==='f'?'Tap a man’s name as her husband.':'Tap a woman’s name. If his wife is not in the tree, type her name instead.',true);return}
@@ -861,7 +864,10 @@ function showSugs(){const L=(DATA&&DATA.suggestions||[]).filter(x=>!OUT.some(o=>
     ${x.father?`<div>Suggested correct father: <span class="ur">${esc(x.father_name)}</span></div>`:''}
     <div class="row"><button type="button" data-go="${esc(x.person)}">Show person</button>${x.father&&P[x.person]&&P[x.father]?`<button type="button" data-fix="${esc(x.sid)}" data-p="${esc(x.person)}" data-f="${esc(x.father)}">Apply: change his father</button>`:''}<button type="button" data-done="${esc(x.sid)}">Done</button></div></div>`).join(''):'No open suggestions.')}
 $('#pendList').onclick=showPend;$('#sugList').onclick=showSugs;
-$('#sugBody').addEventListener('click',e=>{const g=e.target.closest('[data-go]'),d=e.target.closest('[data-done]'),a=e.target.closest('[data-appr]');
+$('#sugBody').addEventListener('click',e=>{const fm=e.target.closest('[data-fixmother]');
+  if(fm){const id=fm.dataset.fixmother,c=fm.dataset.child,f=P[c]&&P[c].parent;if(!f)return;OUT.push({op:'set',id,f:{g:'f'}});OUT.push({op:'set',id,f:{spouse:f}});OUT.push({op:'set',id:c,f:{mother:id}});keep('out',OUT);
+    $('#sugM').hidden=true;rebuild();sync();select(c);toast('Corrected to daughter and linked as mother: '+label(P[id]));return}
+  if(e.target.closest('[data-close]')){$('#sugM').hidden=true;return}const g=e.target.closest('[data-go]'),d=e.target.closest('[data-done]'),a=e.target.closest('[data-appr]');
   if(g){const id=g.dataset.go;$('#sugM').hidden=true;if(P[id]){if(!pos[id]){viewMode='all';viewRoot=null;setModeButtons();draw()}select(id);centerOn(id,Math.max(T.k,0.8))}}
   if(d){queue({op:'resolve',sid:d.dataset.done});showSugs()}
   const ed=e.target.closest('[data-edit]');if(ed){openEntry(ed.dataset.edit)}

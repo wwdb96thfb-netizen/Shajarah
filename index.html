@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Shajarah</title>
+<meta name="theme-color" content="#163a2a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Shajarah">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<style>
+@font-face{font-family:"Nastaliq";src:url(fonts/nastaliq-400.woff2) format("woff2");font-weight:400;font-display:swap}
+@font-face{font-family:"Nastaliq";src:url(fonts/nastaliq-700.woff2) format("woff2");font-weight:700;font-display:swap}
+
+/* Layout: full-height app — top bar, pan/zoom tree canvas, edit panel (side on desktop, bottom sheet on phone). */
+:root{
+  --bg:#f4f1ea; --paper:#fbf9f4; --card:#ffffff; --fg:#1f2421; --muted:#5f6862; --line:#8a8f8a; --rule:#d8dad3;
+  --accent:#2f5d46; --accent-ink:#ffffff; --accent-soft:#e2ede6;
+  --sel:#b8862b; --warn:#a33d2b; --blank:#a9aea9; --dau:#9b4f74; --dau-bg:#f7eaf0; --pro:#94701a; --pro-bg:#f5e9c8; --key-bg:#fbf5e4;
+  --ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif; --ur:"Nastaliq","Noto Nastaliq Urdu","Jameel Noori Nastaleeq",serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141816; --paper:#1a1f1c; --card:#222925; --fg:#e8ece9; --muted:#a3ada7; --line:#7c857f; --rule:#333c37;
+  --accent:#86c7a2; --accent-ink:#0f1612; --accent-soft:#223a2d; --sel:#e0b25a; --warn:#f08a74; --blank:#6f7772; --dau:#e09bbd; --dau-bg:#3a2430; --pro:#d8b45c; --pro-bg:#3b311a; --key-bg:#2b2719; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141816; --paper:#1a1f1c; --card:#222925; --fg:#e8ece9; --muted:#a3ada7; --line:#7c857f; --rule:#333c37;
+  --accent:#86c7a2; --accent-ink:#0f1612; --accent-soft:#223a2d; --sel:#e0b25a; --warn:#f08a74; --blank:#6f7772; --dau:#e09bbd; --dau-bg:#3a2430; --pro:#d8b45c; --pro-bg:#3b311a; --key-bg:#2b2719; color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--ui);font-size:15px;overflow:hidden}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.app{height:100%;display:grid;grid-template-rows:auto 1fr;}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--rule);background:var(--bg)}
+.bar h1{font-family:var(--ur);font-size:1.25rem;margin:0 8px 0 0;line-height:2;font-weight:700}
+.bar .grow{flex:1 1 auto}
+.bar button,.bar select{font:inherit;padding:6px 10px;border-radius:8px;border:1px solid var(--rule);background:var(--card);color:var(--fg);cursor:pointer}
+.bar button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.search{position:relative;flex:1 1 200px;min-width:0;max-width:340px}
+.search input{width:100%;font-family:var(--ur);font-size:1rem;line-height:1.9;padding:2px 10px;border-radius:8px;border:1px solid var(--rule);background:var(--card);color:var(--fg);direction:rtl}
+.results{position:absolute;top:100%;left:0;right:0;z-index:20;background:var(--card);border:1px solid var(--rule);border-radius:8px;margin-top:4px;max-height:50vh;overflow:auto;box-shadow:0 6px 20px rgb(0 0 0 / .15)}
+.results button{display:block;width:100%;text-align:right;font-family:var(--ur);font-size:1rem;line-height:2;padding:2px 12px;border:0;background:none;color:var(--fg);cursor:pointer}
+.results button small{font-family:var(--ui);color:var(--muted);font-size:.75rem;margin-left:6px}
+.results button:hover,.results button:focus{background:var(--accent-soft)}
+.main{position:relative;min-height:0;display:grid;grid-template-columns:1fr auto}
+.canvas{position:relative;overflow:hidden;background:var(--paper);touch-action:none;cursor:grab;min-width:0}
+.canvas.drag{cursor:grabbing}
+svg#tree{position:absolute;inset:0;width:100%;height:100%;user-select:none;-webkit-user-select:none}
+.edge{fill:none;stroke:var(--line);stroke-width:1.4}
+
+.node rect{fill:var(--card);stroke:var(--line);stroke-width:1.2}
+
+.node.blank rect{stroke-dasharray:6 4;stroke:var(--blank)}
+
+.edge.wed{stroke:var(--pro);stroke-width:2.2;stroke-dasharray:7 5}
+.wedl{font-family:var(--ur);font-size:15px;fill:var(--pro)}
+.node.key rect{fill:var(--key-bg);stroke:var(--pro);stroke-width:1.8}
+.node.key text.nm{font-weight:700}
+.node.pro rect{fill:var(--pro-bg);stroke:var(--pro);stroke-width:2.8}
+.node.pro text.nm{font-weight:700;font-size:23px}
+.node.pend rect{stroke:var(--sel);stroke-width:2;stroke-dasharray:5 4}
+.pendbox{border:2px dashed var(--sel)}
+.node.sel rect{stroke:var(--sel);stroke-width:4}
+.node text{font-family:var(--ur);font-size:19px;fill:var(--fg)}
+.node text.note{font-size:13px;fill:var(--muted)}
+
+.picking .node{cursor:crosshair}
+.node{cursor:pointer}
+.hint{position:absolute;left:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:5;font-size:.8rem;color:var(--muted);background:var(--bg);padding:4px 8px;border-radius:6px;border:1px solid var(--rule)}
+.zoom{position:absolute;right:calc(12px + env(safe-area-inset-right,0px));bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:5;display:flex;flex-direction:column;gap:6px}
+.zoom button{width:40px;height:40px;font-size:1.2rem;border-radius:10px;border:1px solid var(--rule);background:var(--card);color:var(--fg);cursor:pointer}
+.banner{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:6;background:var(--sel);color:#1d1606;padding:8px 14px;border-radius:10px;font-weight:600;display:flex;gap:10px;align-items:center;max-width:calc(100% - 32px)}
+.banner button{font:inherit;border:0;border-radius:6px;padding:4px 10px;background:#1d1606;color:#fff;cursor:pointer}
+.panel{width:340px;max-width:100vw;border-left:1px solid var(--rule);background:var(--bg);overflow:auto;padding:14px 16px calc(16px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:12px}
+.panel h2{margin:0;font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.panel .who{font-family:var(--ur);font-size:1.6rem;line-height:2.2;text-align:right;direction:rtl}
+.panel .who.blank{color:var(--blank)}
+.field{display:flex;flex-direction:column;gap:4px;font-size:.85rem;color:var(--muted)}
+.field input{font-family:var(--ur);font-size:1.15rem;line-height:2;padding:2px 10px;border-radius:8px;border:1px solid var(--rule);background:var(--card);color:var(--fg);direction:rtl}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.panel button{font:inherit;font-weight:600;padding:8px 12px;border-radius:8px;border:1px solid var(--rule);background:var(--card);color:var(--fg);cursor:pointer}
+.panel button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.panel button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--fg)}
+.panel button.danger{color:var(--warn);border-color:var(--warn)}
+.panel button:disabled{opacity:.45;cursor:not-allowed}
+.meta{font-size:.85rem;color:var(--muted);line-height:1.5}
+.meta .ur{font-family:var(--ur);font-size:1rem;color:var(--fg)}
+.msg{font-size:.85rem;min-height:1.2em;color:var(--accent)}
+.msg.err{color:var(--warn)}
+.box{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid var(--rule);border-radius:12px;background:var(--card)}
+.box h3{margin:0;font-size:.95rem;font-weight:700;line-height:2}
+.box h3 .ur{font-family:var(--ur);font-size:1.05rem}
+.addbox{border:2px solid var(--accent)}
+.addbox input{font-family:var(--ur);font-size:1.25rem;line-height:2.1;padding:4px 12px;border-radius:10px;border:1px solid var(--rule);background:var(--bg);color:var(--fg);direction:rtl}
+.big2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.panel .big2 button{font-size:1.1rem;padding:12px 8px;border-radius:10px;color:#fff}
+.panel .big2 .son{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.panel .big2 .dau{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+
+.sep{border:0;border-top:1px solid var(--rule);margin:2px 0}
+.empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:var(--muted);padding:24px}
+[hidden]{display:none!important}
+body:not(.ro) .view-only{display:none!important}
+body.ro .edit-only{display:none!important}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--sel);outline-offset:2px}
+@media (max-width:760px){
+  .main{grid-template-columns:1fr;grid-template-rows:1fr auto}
+  .panel{width:auto;border-left:0;border-top:1px solid var(--rule);max-height:42vh}
+  .hint{display:none}
+  .bar h1{font-size:1.05rem}
+}
+.modal{position:fixed;inset:0;z-index:50;background:rgb(0 0 0 / .35);display:grid;place-items:center;padding:16px}
+.modal .card{background:var(--bg);color:var(--fg);border-radius:14px;padding:18px;width:min(460px,100%);max-height:80vh;overflow:auto;display:flex;flex-direction:column;gap:12px;box-shadow:0 10px 40px rgb(0 0 0 / .3)}
+.modal h3{margin:0;font-size:1.05rem}
+.modal input,.panel textarea{font:inherit;font-size:1rem;padding:8px 10px;border-radius:8px;border:1px solid var(--rule);background:var(--card);color:var(--fg)}
+.panel textarea{font-family:var(--ur);font-size:1.05rem;line-height:2;direction:rtl;min-height:90px;resize:vertical}
+.modal button{font:inherit;font-weight:600;padding:8px 14px;border-radius:8px;border:1px solid var(--rule);background:var(--card);color:var(--fg);cursor:pointer}
+.modal button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.sugg{border:1px solid var(--rule);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;background:var(--card)}
+.sugg .t{font-family:var(--ur);direction:rtl;text-align:right;line-height:2}
+.bar #pendList.has{background:var(--sel);border-color:var(--sel);color:#1d1606;font-weight:700}
+.panel button.kind.on{background:var(--accent-soft);border-color:var(--accent)}
+.wm{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4}
+.wm text{font-family:var(--ui);font-size:22px;font-weight:700;fill:var(--fg);opacity:.14}
+.linkbox{font:inherit;font-size:.85rem;width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--rule);background:var(--bg);color:var(--fg)}
+.lock{max-width:420px;line-height:1.6;color:var(--fg)}
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea{-webkit-user-select:text;user-select:text}
+@media print{body *{display:none!important}body::after{content:"Printing the Shajrah is not allowed.";display:block;padding:40px;font:20px sans-serif}}
+.byname{font:inherit;padding:6px 10px;border-radius:8px;border:1px solid var(--rule);background:var(--bg);color:var(--fg)}
+
+.app[hidden]{display:none!important}
+.app{height:100%}
+.bar{padding-top:max(8px,env(safe-area-inset-top,0px))}
+.pill{font-size:.8rem;font-weight:600;padding:5px 10px;border-radius:999px;border:1px solid var(--rule);background:var(--card);color:var(--muted);cursor:pointer;white-space:nowrap}
+.pill.ok{color:var(--accent);border-color:var(--accent)}
+.pill.wait{color:#1d1606;background:var(--sel);border-color:var(--sel)}
+.pill.off{color:var(--warn);border-color:var(--warn)}
+.bar #pendList.has{background:var(--sel);border-color:var(--sel);color:#1d1606;font-weight:700}
+.screen{position:fixed;inset:0;z-index:60;background:var(--bg);display:grid;place-items:center;padding:24px max(16px,env(safe-area-inset-left,0px));overflow:auto}
+.screen .card{width:min(440px,100%);display:flex;flex-direction:column;gap:14px;text-align:center}
+.screen h1{font-family:var(--ur);font-size:2rem;line-height:2.2;margin:0}
+.screen .logo{width:84px;height:84px;border-radius:20px;margin:0 auto}
+.screen p{margin:0;line-height:1.55;color:var(--muted)}
+.screen p.strong{color:var(--fg);font-weight:600}
+.screen input{font:inherit;font-size:1.05rem;padding:12px;border-radius:10px;border:1px solid var(--rule);background:var(--card);color:var(--fg);text-align:center}
+.screen input.pin{font-size:1.6rem;letter-spacing:.4em}
+.screen button{font:inherit;font-weight:700;font-size:1.05rem;padding:13px;border-radius:10px;border:1px solid var(--rule);background:var(--card);color:var(--fg);cursor:pointer}
+.screen button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.screen button.link{border:0;background:none;color:var(--muted);font-weight:600;font-size:.9rem;text-decoration:underline}
+.screen ol{text-align:left;line-height:1.8;margin:0;padding-left:22px}
+.screen .err{color:var(--warn);min-height:1.2em}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:70;background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:10px;max-width:calc(100% - 32px);font-size:.9rem;box-shadow:0 6px 20px rgb(0 0 0 / .25)}
+.toast.err{background:var(--warn);color:#fff}
+.instbar{display:flex;gap:8px;align-items:center;padding:8px 16px;background:var(--accent-soft);font-size:.9rem}
+.instbar button{font:inherit;font-weight:700;padding:6px 12px;border-radius:8px;border:0;background:var(--accent);color:var(--accent-ink)}
+.hist{font-size:.85rem;border-bottom:1px solid var(--rule);padding:6px 0}
+.hist .ur{font-family:var(--ur)}
+.wm{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4}
+.wm text{font-family:var(--ui);font-size:22px;font-weight:700;fill:var(--fg);opacity:.14}
+.lnk{font:inherit;font-size:.85rem;width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--rule);background:var(--bg);color:var(--fg)}
+body.ro{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
+@media print{body.ro *{display:none!important}body.ro::after{content:"Printing the Shajarah is not allowed.";display:block;padding:40px;font:20px sans-serif}}
+</style>
+</head><body class="ro">
+
+<div class="screen" id="scrSetup" hidden><div class="card">
+  <img class="logo" src="icon-192.png" alt="">
+  <h1>شجرۃ الطیبہ</h1>
+  <p class="strong" id="setupTitle">This Shajarah is private.</p>
+  <p id="setupMsg">Open it with the personal link Iftikhar sent you. If you were asked to paste your link, paste it here.</p>
+  <input id="pasteLink" type="url" placeholder="Paste your link here" aria-label="Your personal link" autocomplete="off">
+  <button type="button" class="primary" id="pasteGo">Continue</button>
+  <div class="err" id="setupErr"></div>
+  <button type="button" class="link" id="resetBtn">Reset this phone</button>
+</div></div>
+
+<div class="screen" id="scrInstall" hidden><div class="card">
+  <img class="logo" src="icon-192.png" alt="">
+  <h1>شجرۃ الطیبہ</h1>
+  <p class="strong">First, put the app on your home screen</p>
+  <ol>
+    <li>Tap <b>Copy my link</b> below.</li>
+    <li>Tap the <b>Share</b> button at the bottom of Safari.</li>
+    <li>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</li>
+    <li>Open <b>Shajarah</b> from your home screen and paste the link.</li>
+  </ol>
+  <button type="button" class="primary" id="copyLink">Copy my link</button>
+  <button type="button" class="link" id="noInstall">Use it in Safari instead</button>
+</div></div>
+
+<div class="screen" id="scrPin" hidden><div class="card">
+  <img class="logo" src="icon-192.png" alt="">
+  <h1>شجرۃ الطیبہ</h1>
+  <p class="strong" id="pinTitle">Enter your PIN</p>
+  <input id="pin1" class="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" aria-label="PIN">
+  <input id="pin2" class="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" aria-label="Repeat PIN" placeholder="repeat" hidden>
+  <button type="button" class="primary" id="pinGo">Open</button>
+  <div class="err" id="pinErr"></div>
+</div></div>
+
+<div class="app" id="app" hidden>
+  <div class="bar">
+    <h1>شجرۃ الطیبہ</h1>
+    <div class="search"><input id="q" type="search" placeholder="نام تلاش کریں / search" aria-label="Search a name"><div class="results" id="res" hidden></div></div>
+    <span class="grow"></span>
+    <button type="button" class="pill" id="syncPill" title="Tap to send now">…</button>
+    <button type="button" id="vStart" class="on" title="Start from Syed Muazzam Shah (Jalalia)">From Jalalia</button>
+    <button type="button" id="vAll" title="Whole lineage from Hazrat Adam">Full lineage</button>
+    <button type="button" id="pendList" hidden>New entries</button>
+    <button type="button" id="sugList" hidden>Suggestions</button>
+    <button type="button" id="usersBtn" hidden>People</button>
+    <button type="button" id="histBtn" hidden>History</button>
+  </div>
+  <div class="instbar" id="instBar" hidden><span>Put Shajarah on your home screen</span><button type="button" id="instGo">Install</button></div>
+  <div class="main">
+    <div class="canvas" id="cv">
+      <svg id="tree" aria-label="Family tree"><g id="world"></g></svg>
+      <div class="banner" id="banner" hidden><span id="bannerTxt"></span><button type="button" id="cancelPick">Cancel</button></div>
+      <div class="zoom"><button type="button" id="zin" aria-label="Zoom in">+</button><button type="button" id="zout" aria-label="Zoom out">−</button><button type="button" id="zfit" aria-label="Fit whole tree">⤢</button></div>
+      <div class="hint">Drag to move · pinch to zoom · tap a name</div>
+      <div class="empty" id="empty">Loading the Shajarah…</div>
+      <svg class="wm" id="wm" aria-hidden="true" hidden><defs><pattern id="wmp" width="360" height="200" patternUnits="userSpaceOnUse" patternTransform="rotate(-25)"><text id="wmt" x="10" y="100"></text></pattern></defs><rect width="100%" height="100%" fill="url(#wmp)"/></svg>
+    </div>
+    <aside class="panel" id="panel">
+      <div id="pEmpty" class="meta"><b>Tap any name</b> to see his family<span id="pEmptyAdd">, add his sons and daughters</span>, or to tell Iftikhar if something is wrong.<br><br>Names with a dotted border are new entries waiting for approval.</div>
+      <div id="pBody" hidden style="display:flex;flex-direction:column;gap:12px">
+        <h2>Selected</h2>
+        <div class="who" id="who"></div>
+        <div class="meta" id="rel"></div>
+        <section class="box addbox" id="secAdd">
+          <h3>Add a child under <span class="ur" id="addTo"></span></h3>
+          <input id="fSon" type="text" dir="auto" placeholder="Name — Urdu or English" aria-label="Child's name">
+          <div class="big2"><button type="button" class="son" id="addSon">+ Son</button><button type="button" class="dau" id="addDau">+ Daughter</button></div>
+          <div class="meta">Names typed in English are changed to Urdu. Works without internet too: it is sent when the phone is online.</div>
+          <div class="meta" id="famAddNote" hidden>New names show with a dotted border until Iftikhar approves them. You can correct a name you added until then.</div>
+        </section>
+        <section class="box pendbox" id="secPend" hidden>
+          <h3>New entry — waiting for approval</h3>
+          <div class="meta" id="pendBy"></div>
+          <div class="row" id="pendOwner"><button type="button" class="primary" id="apprBtn">Approve</button><button type="button" id="apprAll">Approve all new entries</button><button type="button" class="danger" id="rejBtn">Reject</button></div>
+        </section>
+        <section class="box" id="secFix">
+          <h3>Correct this name</h3>
+          <label class="field">Name<input id="fName" type="text" dir="auto" placeholder="(blank — unclear)"></label>
+          <div class="meta" id="guess" hidden></div>
+          <label class="field" id="noteLbl">Note (optional, e.g. tomb, place)<input id="fNote" type="text" dir="rtl"></label>
+          <div class="row"><button type="button" class="primary" id="saveBtn">Save</button></div>
+        </section>
+        <section class="box suggest" id="secSug">
+          <h3>Is this name or his father wrong?</h3>
+          <div class="meta">Names already in the Shajarah are locked. Tell Iftikhar what is wrong and he will check it.</div>
+          <div class="row" role="radiogroup" aria-label="What is wrong"><button type="button" class="kind on" data-kind="name">Wrong spelling</button><button type="button" class="kind" data-kind="father">Wrong father</button><button type="button" class="kind" data-kind="other">Other</button></div>
+          <label class="field" id="sugLbl">Correct spelling<textarea id="sugText" aria-label="Your suggestion"></textarea></label>
+          <button type="button" class="primary" id="suggestBtn">Send suggestion</button>
+          <div class="meta" id="suggestMsg" aria-live="polite"></div>
+        </section>
+        <div id="secMore" style="display:flex;flex-direction:column;gap:12px"><h2>More</h2>
+          <div class="row"><span class="meta" style="align-self:center">Highlight:</span><button type="button" id="hlN">None</button><button type="button" id="hlK">Important</button><button type="button" id="hlP">Prophet</button></div>
+          <div class="row"><span class="meta" style="align-self:center">This person is a:</span><button type="button" id="gM">Son</button><button type="button" id="gF">Daughter</button></div>
+          <div class="row">
+            <button type="button" id="chFather">Change father</button>
+            <button type="button" id="mvR" title="Move towards the right (elder side)">◀ Move</button>
+            <button type="button" id="mvL" title="Move towards the left">Move ▶</button>
+          </div>
+        </div>
+        <div class="row">
+          <button type="button" id="focusBtn">Show his family only</button>
+          <button type="button" id="delBtn" class="danger">Delete</button>
+        </div>
+        <div class="msg" id="msg" aria-live="polite"></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="modal" id="usrM" hidden><div class="card">
+  <h3>People &amp; personal links</h3>
+  <div class="meta">Make one link for each person. A link works on <b>one phone only</b> — the first phone that opens it. A forwarded link will not open for anyone else.</div>
+  <div class="box"><label class="field">Person’s name<input id="uName" type="text" dir="auto" placeholder="e.g. Abbu, Chacha Jan"></label>
+    <label class="meta"><input id="uAdd" type="checkbox" checked> Allowed to add sons and daughters (otherwise: view and suggest only)</label>
+    <button type="button" class="primary" id="uGo">Make personal link</button>
+    <div id="uNew" class="meta"></div></div>
+  <div id="uList" class="meta">Loading…</div>
+  <div class="row"><button type="button" id="usrX">Close</button></div></div></div>
+<div class="modal" id="sugM" hidden><div class="card">
+  <h3 id="sugTitle">Suggestions</h3><div id="sugBody" class="meta"></div>
+  <div class="row"><button type="button" id="sugX">Close</button></div></div></div>
+<div class="toast" id="toast" hidden></div>
+<script>
+'use strict';
+const NS='http://www.w3.org/2000/svg';
+const $=s=>document.querySelector(s);
+const esc=t=>String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// ---- what this phone keeps
+const load=k=>{try{return JSON.parse(localStorage.getItem('sj.'+k))}catch(e){return null}};
+const keep=(k,v)=>{try{localStorage.setItem('sj.'+k,JSON.stringify(v))}catch(e){}};
+const hex=a=>[...new Uint8Array(a)].map(b=>b.toString(16).padStart(2,'0')).join('');
+let cfg=load('cfg')||{};                 // {c: personal code, t: private topic, s: server address}
+let DEVID=load('dev');if(!DEVID){const a=new Uint8Array(16);crypto.getRandomValues(a);DEVID=hex(a);keep('dev',DEVID)}
+let DATA=load('tree');                   // the last tree received from the server
+let OUT=load('out')||[];                 // changes made on this phone that the server has not received yet
+let PIN=null, server=null, syncing=false, finding=null, ME=DATA&&DATA.me||null;
+let P={}, settings={}, canWrite=false, canAdd=false, sugKind='name';
+let viewRoot=null, viewMode='start', sel=null, picking=null, delArm=false;
+let pos={}, T={x:0,y:0,k:1}, first=true;
+const sampler=null;
+const BH=50, GAP=10, LEVEL=40, PAD=14;
+const cvEl=$('#cv'), world=$('#world'), svg=$('#tree');
+const ctx=document.createElement('canvas').getContext('2d');
+function tw(t,b,sz){ctx.font=`${b?700:400} ${sz||19}px "Nastaliq"`;return ctx.measureText(t).width}
+const kids=id=>Object.keys(P).filter(k=>P[k].parent===id).sort((a,b)=>(P[a].order??0)-(P[b].order??0)||a.localeCompare(b));
+const topRoots=()=>Object.keys(P).filter(k=>!P[k].parent||!P[P[k].parent]);
+function ancestors(id){const s=new Set();let c=id,g=0;while(c&&P[c]&&g++<500){s.add(c);c=P[c].parent}return s}
+function msg(t,err){const m=$('#msg');m.textContent=t;m.className='msg'+(err?' err':'')}
+const label=p=>p.name&&p.name.trim()?p.name:'';
+const normS=s=>{s=String(s||'').trim();if(!s)return'';if(!/^https?:\/\//.test(s))s='https://'+s;return s.replace(/\/+$/,'')};
+function takeLink(text){text=String(text||'').trim();const qi=text.indexOf('?');const q=new URLSearchParams(qi>=0?text.slice(qi+1).split('#')[0]:text);
+  const c=q.get('c');if(!c||!/^[a-z0-9]{8,40}$/.test(c))return false;
+  if(cfg.c&&cfg.c!==c){DATA=null;OUT=[];keep('tree',null);keep('out',[]);keep('pinv',null)}
+  cfg={c,t:q.get('t')||'',s:q.get('s')?normS(q.get('s')):''};keep('cfg',cfg);return true}
+if(location.search.length>1&&takeLink(location.href)){try{history.replaceState(null,'',location.pathname)}catch(e){}}
+
+// ---- finding the server on the owner's Mac (its address changes; it is announced on a private topic)
+async function fx(url,opts,ms){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms||15000);try{return await fetch(url,Object.assign({},opts,{signal:c.signal}))}finally{clearTimeout(t)}}
+async function hmac(key,msg){const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(key),{name:'HMAC',hash:'SHA-256'},false,['sign']);return hex(await crypto.subtle.sign('HMAC',k,new TextEncoder().encode(msg)))}
+async function sha(s){return hex(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))}
+async function hello(url){const a=new Uint8Array(16);crypto.getRandomValues(a);const n=hex(a),uid=(await sha(cfg.c)).slice(0,16);
+  const r=await fx(url+'/api/hello?u='+uid+'&n='+n+'&_='+Date.now(),{},9000);
+  if(r.status===404){const g=await r.json().catch(()=>({}));return g&&g.gone&&cfg.t&&g.gone===await hmac(cfg.t,n+':'+uid)?'gone':'no'}
+  if(!r.ok)return'no';const j=await r.json();return j&&j.proof===await hmac(cfg.c,n)?'ok':'no'}
+async function announced(){if(!cfg.t)return null;try{const r=await fx('https://ntfy.sh/'+cfg.t+'/json?poll=1&since=24h',{},10000);let url=null;
+  (await r.text()).split('\n').forEach(l=>{try{const m=JSON.parse(l);if(m.event==='message'&&/^https:\/\/[a-z0-9.-]+$/.test(m.message||''))url=m.message}catch(e){}});return url}catch(e){return null}}
+async function findServer(){if(server)return server;if(finding)return finding;
+  finding=(async()=>{if(!navigator.onLine||!cfg.c)return null;const tried=[];
+    for(const get of [()=>cfg.s,announced]){const u=await get();if(!u||tried.includes(u))continue;tried.push(u);
+      try{const h=await hello(u);if(h==='ok'){if(cfg.s!==u){cfg.s=u;keep('cfg',cfg)}return u}if(h==='gone'){revoked();return null}}catch(e){}}
+    return null})();
+  const s=await finding;finding=null;server=s;return s}
+async function api(path,opts){const s=await findServer();if(!s)throw{net:true};let r;
+  const h={'x-code':cfg.c,'x-dev':DEVID};if(PIN)h['x-pin']=PIN;if(opts&&opts.body)h['content-type']='application/json';
+  try{r=await fx(s+path+(path.includes('?')?'&':'?')+'_='+Date.now(),Object.assign({},opts,{headers:h}),(opts&&opts.ms)||60000)}catch(e){server=null;throw{net:true}}
+  if(r.status===401){const e=await r.json().catch(()=>({}));
+    if(e.error==='device'){blocked();throw{stop:true}}
+    if(e.error==='setpin'){askPin('set');throw{stop:true}}
+    if(e.error==='pin'){PIN=null;askPin('enter',e.locked?'Too many wrong tries. Wait 15 minutes.':'Wrong PIN. Try again.');throw{stop:true}}
+    revoked(e.error==='cancelled');throw{stop:true}}
+  if(r.status>=500){server=null;throw{net:true}}
+  if(!r.ok){const e=await r.json().catch(()=>({}));throw{status:r.status,error:e.error}}
+  return r.json()}
+
+// ---- waiting list: every change is saved on the phone first, then sent when there is internet
+function rid(p){const a=new Uint8Array(8);crypto.getRandomValues(a);return p+[...a].map(b=>(b%36).toString(36)).join('')}
+function queue(op){OUT.push(op);keep('out',OUT);rebuild();sync()}
+function applyLocal(base){const M={};for(const k in base)M[k]=Object.assign({},base[k]);
+  OUT.forEach(o=>{const x=M[o.id];
+    if(o.op==='add'&&!M[o.id]&&M[o.parent])M[o.id]={name:o.name,parent:o.parent,order:9999+(o.n||0),g:o.g,note:'',star:'',spouse:'',guess:'',pend:ME&&ME.owner?0:1,mine:1,local:1,by:ME?ME.name:''};
+    else if(o.op==='edit'&&x){x.name=o.name;if(typeof o.note==='string')x.note=o.note;x.local=1}
+    else if(o.op==='set'&&x){Object.assign(x,o.f);x.local=1}
+    else if(o.op==='approve'&&x)x.pend=0;
+    else if((o.op==='reject'||o.op==='delete')&&x)delete M[o.id]});
+  return M}
+function rebuild(){P=applyLocal(DATA?DATA.people:{});settings={start:DATA&&DATA.start||'p0084'};pill();
+  if(!Object.keys(P).length)return;$('#empty').hidden=true;if(viewMode==='start')viewRoot=settings.start;draw();if(first){first=false;fit()}
+  if(sel&&P[sel])select(sel);else if(sel)select(null);if(canWrite)pendCount()}
+function setData(j){DATA={ver:j.ver,people:j.people,start:j.start,me:j.me,suggestions:j.suggestions||[]};keep('tree',DATA);setMe(j.me)}
+function setMe(me){ME=me;canWrite=!!(me&&me.owner);canAdd=canWrite||(me&&me.role==='family');document.body.classList.toggle('ro',!canWrite);
+  ['pendList','sugList','usersBtn','histBtn'].forEach(b=>$('#'+b).hidden=!canWrite);$('#pEmptyAdd').hidden=!canAdd;watermark()}
+async function sync(){if(syncing||!cfg.c||(ME&&ME.owner&&!PIN))return;syncing=true;pill();
+  try{if(OUT.length){const batch=OUT.slice(0,100),j=await api('/api/sync',{method:'POST',body:JSON.stringify({ops:batch})});
+      const bad=[];(j.results||[]).forEach((r,i)=>{if(r&&r.error)bad.push(r.error)});
+      OUT=OUT.slice(batch.length);keep('out',OUT);setData(j);rebuild();
+      if(bad.length)toast('Not accepted: '+bad[0],true);else if(batch.some(o=>o.op==='add'||o.op==='suggest'))toast('Sent to the server');
+      if(OUT.length){syncing=false;return sync()}}
+    else{const j=await api('/api/tree?v='+(DATA&&DATA.ver||''));if(!j.same){setData(j);rebuild()}else setMe(j.me)}
+    showApp()}
+  catch(e){}finally{syncing=false;pill()}}
+function pill(){const b=$('#syncPill'),n=OUT.length;
+  if(n){b.className='pill wait';b.textContent=(navigator.onLine?'Sending… ':'Offline · ')+n+' waiting'}
+  else if(!navigator.onLine||!server){b.className='pill off';b.textContent=navigator.onLine?'Not connected':'Offline'}
+  else{b.className='pill ok';b.textContent='● Up to date'}}
+$('#syncPill').onclick=()=>{server=null;sync()};
+window.addEventListener('online',()=>{pill();sync()});window.addEventListener('offline',pill);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){sync();try{navigator.serviceWorker&&navigator.serviceWorker.getRegistration().then(r=>r&&r.update())}catch(e){}}});
+setInterval(()=>{if(!document.hidden)sync()},45000);
+let tt=null;function toast(t,err){const x=$('#toast');x.textContent=t;x.className='toast'+(err?' err':'');x.hidden=false;clearTimeout(tt);tt=setTimeout(()=>{x.hidden=true},err?6000:2500)}
+
+// ---- screens
+function screen(id){['scrSetup','scrInstall','scrPin'].forEach(s=>$('#'+s).hidden=s!==id);$('#app').hidden=!!id}
+function showApp(){if(ME&&ME.owner&&!PIN)return;screen(null);rebuild()}
+function setupScreen(title,msg){screen('scrSetup');if(title)$('#setupTitle').textContent=title;if(msg)$('#setupMsg').textContent=msg}
+function revoked(cancelled){DATA=null;OUT=[];keep('tree',null);keep('out',[]);keep('pinv',null);const was=cfg.c;cfg={};keep('cfg',cfg);PIN=null;P={};world.textContent='';
+  setupScreen(cancelled?'Your access has been cancelled.':'This link no longer works.','Your access may have been cancelled or replaced. Ask Iftikhar for a new personal link.')}
+function blocked(){DATA=null;OUT=[];keep('tree',null);keep('out',[]);cfg={};keep('cfg',cfg);P={};world.textContent='';
+  setupScreen('This link is already used on another phone.','Each link works on one phone only. Ask Iftikhar for your own link.')}
+$('#pasteGo').onclick=()=>{if(takeLink($('#pasteLink').value)){$('#setupErr').textContent='';$('#pasteLink').value='';start()}else $('#setupErr').textContent='That is not a Shajarah link. Paste the full link you were sent.'};
+$('#resetBtn').onclick=async()=>{if(!confirmReset()){return}try{localStorage.clear()}catch(e){}try{const ks=await caches.keys();await Promise.all(ks.map(k=>caches.delete(k)))}catch(e){}location.reload()};
+let resetArm=0;function confirmReset(){if(Date.now()-resetArm<4000)return true;resetArm=Date.now();$('#resetBtn').textContent='Tap again to reset (everything on this phone is forgotten)';return false}
+// owner PIN
+let pinMode='enter';
+function askPin(mode,err){pinMode=mode;screen('scrPin');$('#pin1').value='';$('#pin2').value='';$('#pin2').hidden=mode!=='set';
+  $('#pinTitle').textContent=mode==='set'?'Choose a PIN (4–8 digits) to protect your owner access':'Enter your PIN';$('#pinGo').textContent=mode==='set'?'Save PIN':'Open';$('#pinErr').textContent=err||'';setTimeout(()=>$('#pin1').focus(),50)}
+$('#pinGo').onclick=async()=>{const a=$('#pin1').value.trim(),b=$('#pin2').value.trim(),E=$('#pinErr');
+  if(!/^\d{4,8}$/.test(a)){E.textContent='Use 4 to 8 digits.';return}
+  if(pinMode==='set'){if(a!==b){E.textContent='The two PINs are not the same.';return}
+    E.textContent='Saving…';try{await api('/api/pin',{method:'POST',body:JSON.stringify({pin:a})});PIN=a;keep('pinv',await sha(cfg.c+':'+a));screen(null);sync()}catch(e){if(!e.stop)E.textContent='No connection to the server. Try again when online.'}return}
+  // offline the PIN is checked against the copy kept on this phone; online the server checks it
+  const v=await sha(cfg.c+':'+a),kept=load('pinv');
+  if(!navigator.onLine||!(await findServer())){if(kept&&kept===v){PIN=a;showApp();return}E.textContent=kept?'Wrong PIN.':'No connection to the server.';return}
+  PIN=a;E.textContent='Checking…';try{const j=await api('/api/tree?v='+(DATA&&DATA.ver||''));keep('pinv',v);if(!j.same)setData(j);else setMe(j.me);showApp();sync()}catch(e){}};
+['pin1','pin2'].forEach(i=>$('#'+i).addEventListener('keydown',e=>{if(e.key==='Enter')$('#pinGo').click()}));
+// install
+const INSTALLED=!!(navigator.standalone||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches));
+const IOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+let instEv=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();instEv=e;$('#instBar').hidden=false});
+$('#instGo').onclick=async()=>{if(!instEv)return;instEv.prompt();try{await instEv.userChoice}catch(e){}$('#instBar').hidden=true};
+$('#copyLink').onclick=async()=>{const L=location.origin+location.pathname+'?t='+cfg.t+'&c='+cfg.c+(cfg.s?'&s='+cfg.s.replace('https://',''):'');
+  try{await navigator.clipboard.writeText(L);$('#copyLink').textContent='Copied ✓'}catch(e){$('#copyLink').textContent='Could not copy — use the link you were sent'}};
+$('#noInstall').onclick=()=>{keep('noinst',1);start()};
+
+// ---- watermark, no printing, no copying (for everyone except the owner)
+function watermark(){const on=!canWrite&&ME&&ME.name;$('#wm').toggleAttribute('hidden',!on);if(on)$('#wmt').textContent=ME.name+' · '+new Date().toISOString().slice(0,10)+' · '+ME.name}
+document.addEventListener('contextmenu',e=>{if(!canWrite)e.preventDefault()});
+document.addEventListener('copy',e=>{if(!canWrite&&!/INPUT|TEXTAREA/.test((e.target||{}).tagName||''))e.preventDefault()});
+// A run of 4+ people who each have exactly one child is folded into compact rows (read right to left, snaking).
+let chainEdges=[];
+const CHAIN_MIN=4, CHAIN_ROW_MAX=1700, CGAP=22, CROW=BH+26;
+function runFrom(id){const a=[id];let g=0;while(g++<600){const k=kids(a[a.length-1]);if(k.length!==1)break;a.push(k[0])}return a}
+function layout(){
+  pos={};chainEdges=[];const BW={};
+  const roots=viewRoot&&P[viewRoot]?[viewRoot]:topRoots();
+  const meSet=settings.me?ancestors(settings.me):new Set();
+  const bw=id=>{const p=P[id];return Math.max(64,tw(label(p)||'—',!!p.star,p.star==='p'?23:19)+2*PAD+(p.star==='p'?12:0),p.note?tw(p.note,false)*0.6+30:0)};
+  const bh=id=>BH+(P[id].note?18:0);
+  // Each subtree is built in its own coordinates (root centre = x 0, top = y 0) with an outline of
+  // horizontal bands; brothers' families are then slid together until their outlines nearly touch.
+  function build(id,d){
+    const T={nodes:[],segs:[],chain:[]};if(d>800)return T;
+    const par=P[id].parent,solo=!par||!P[par]||kids(par).length===1;
+    const run=solo?runFrom(id):[id];let ks,ky;
+    if(run.length>=CHAIN_MIN){
+      run.forEach(r=>BW[r]=bw(r));
+      const rows=[];let cur=[],cw=0;
+      run.forEach(r=>{const w=BW[r];if(P[r].star==='p'){if(cur.length)rows.push(cur);rows.push([r]);cur=[];cw=0;return}
+        if(cur.length&&cw+CGAP+w>CHAIN_ROW_MAX){rows.push(cur);cur=[];cw=0}cw+=(cur.length?CGAP:0)+w;cur.push(r)});
+      if(cur.length)rows.push(cur);
+      const blockW=Math.max(...rows.map(r=>r.reduce((a,x)=>a+BW[x],0)+CGAP*(r.length-1))),bx=-blockW/2;
+      rows.forEach((row,ri)=>{const rtl=ri%2===0;const rw=row.reduce((a,r)=>a+BW[r],0)+CGAP*(row.length-1);
+        let cx=rtl?bx+blockW:bx; if(row.length===1&&P[row[0]].star==='p')cx=rtl?bx+(blockW+rw)/2:bx+(blockW-rw)/2;
+        let lo=1e9,hi=-1e9,hh=BH;
+        row.forEach(r=>{const x=rtl?cx-BW[r]:cx;T.nodes.push([r,x,ri*CROW,BW[r]]);lo=Math.min(lo,x);hi=Math.max(hi,x+BW[r]);hh=Math.max(hh,bh(r));cx=rtl?cx-BW[r]-CGAP:cx+BW[r]+CGAP});
+        T.segs.push({y0:ri*CROW,y1:ri*CROW+Math.max(hh,CROW),l:Math.min(lo,bx)-18,r:Math.max(hi,bx+blockW)+18});
+        for(let i=1;i<row.length;i++)T.chain.push([row[i-1],row[i],'']);
+        if(ri>0)T.chain.push([rows[ri-1][rows[ri-1].length-1],row[0],(ri-1)%2===0?'L':'R'])});
+      const last=run[run.length-1];ks=kids(last);ky=(rows.length-1)*CROW+BH+LEVEL;
+      var anchor=T.nodes.find(n=>n[0]===last);
+    }else{
+      BW[id]=bw(id);T.nodes.push([id,-BW[id]/2,0,BW[id]]);T.segs.push({y0:0,y1:bh(id),l:-BW[id]/2,r:BW[id]/2});
+      ks=kids(id);ky=bh(id)>BH?bh(id)+LEVEL-18:BH+LEVEL;var anchor=null;
+    }
+    if(ks.length){
+      // first son on the right (Urdu order); each next brother slides in from the left
+      const subs=ks.map(k=>build(k,d+1)),off=[0];const acc=subs[0].segs.slice();
+      for(let i=1;i<subs.length;i++){let sft=1e9;
+        for(const c of subs[i].segs)for(const a of acc)if(c.y0<a.y1&&a.y0<c.y1){const g=(c.y0===0&&a.y0===0)?GAP:GAP*2;sft=Math.min(sft,a.l-g-c.r)}
+        if(sft===1e9)sft=off[i-1]-60;off.push(sft);subs[i].segs.forEach(c=>acc.push({y0:c.y0,y1:c.y1,l:c.l+sft,r:c.r+sft}))}
+      const mid=(off[0]+off[off.length-1])/2,ax=anchor?anchor[1]+anchor[3]/2:0,shift=ax-mid;
+      subs.forEach((S,i)=>{const dx=off[i]+shift;S.nodes.forEach(n=>T.nodes.push([n[0],n[1]+dx,n[2]+ky,n[3]]));S.chain.forEach(c=>T.chain.push(c));
+        S.segs.forEach(c=>T.segs.push({y0:c.y0+ky,y1:c.y1+ky,l:c.l+dx,r:c.r+dx}))});
+      // the connecting bar between the sons is part of the outline too
+      const ay=anchor?anchor[2]:0;T.segs.push({y0:ay+BH,y1:ky,l:Math.min(ax,off[off.length-1]+shift)-4,r:Math.max(ax,off[0]+shift)+4});
+    }
+    return T}
+  let x=0;roots.forEach(r=>{const T=build(r,0);const lo=Math.min(...T.segs.map(c=>c.l)),hi=Math.max(...T.segs.map(c=>c.r));
+    T.nodes.forEach(([id,nx,ny,w])=>pos[id]={x:nx-lo+x,y:ny,w});T.chain.forEach(c=>chainEdges.push(c));x+=hi-lo+60});
+  // Bring a husband's small branch (e.g. Abu Talib → Ali) right beside his wife's line (Abdullah → Prophet ﷺ → Fatima)
+  for(const wid in pos){const sid=P[wid].spouse;if(!sid||!pos[sid]||kids(sid).length)continue;
+    const q=P[sid].parent,m=P[wid].parent,g=m&&P[m].parent;
+    if(!q||!g||!pos[q]||!pos[m]||!pos[g]||kids(q).length!==1||P[q].parent!==P[g].parent)continue;
+    const left=pos[q].x<pos[g].x,G=pos[g],M=pos[m],Q=pos[q],S=pos[sid];
+    Q.x=left?Math.min(G.x,M.x)-90-Q.w:Math.max(G.x+G.w,M.x+M.w)+90;Q.y=G.y;
+    S.x=Q.x+Q.w/2-S.w/2;S.y=M.y;
+    if(left&&S.x+S.w>M.x-30){const d=S.x+S.w-(M.x-30);Q.x-=d;S.x-=d}
+    if(!left&&S.x<M.x+M.w+30){const d=M.x+M.w+30-S.x;Q.x+=d;S.x+=d}}
+  return meSet;
+}
+function draw(){
+  const meSet=layout();
+  world.textContent='';
+  const eg=document.createElementNS(NS,'g'),ng=document.createElementNS(NS,'g');
+  world.append(eg,ng);
+  const chained=new Set(chainEdges.map(e=>e[0]));
+  chainEdges.forEach(([a,b,side])=>{const A=pos[a],B=pos[b];if(!A||!B)return;const me=meSet.has(a)&&meSet.has(b);let d;
+    if(!side){const ya=A.y+BH/2;d=A.x>B.x?`M${A.x} ${ya}H${B.x+B.w}`:`M${A.x+A.w} ${ya}H${B.x}`}
+    else if(side==='L'){const sx=Math.min(A.x,B.x)-14;d=`M${A.x} ${A.y+BH/2}H${sx}V${B.y+BH/2}H${B.x}`}
+    else{const sx=Math.max(A.x+A.w,B.x+B.w)+14;d=`M${A.x+A.w} ${A.y+BH/2}H${sx}V${B.y+BH/2}H${B.x+B.w}`}
+    const e=document.createElementNS(NS,'path');e.setAttribute('d',d);e.setAttribute('class','edge'+(me?' me':''));eg.append(e)});
+  for(const id in pos){if(chained.has(id))continue;const ks=kids(id).filter(k=>pos[k]);if(!ks.length)continue;
+    const p=pos[id],cx=p.x+p.w/2,y0=p.y+BH,my=y0+LEVEL/2;
+    const cs=ks.map(k=>pos[k].x+pos[k].w/2);
+    const add=(d,me)=>{const e=document.createElementNS(NS,'path');e.setAttribute('d',d);e.setAttribute('class','edge'+(me?' me':''));eg.append(e)};
+    add(`M${cx} ${y0}V${my}M${Math.min(cx,...cs)} ${my}H${Math.max(cx,...cs)}`,false);
+    ks.forEach((k,i)=>{const me=meSet.has(k)&&meSet.has(id);add(`M${cs[i]} ${my}V${pos[k].y}`,me);if(me)add(`M${cx} ${y0}V${my}H${cs[i]}`,true)})}
+  // marriage link (e.g. Hazrat Ali ↔ Hazrat Fatima): dashed gold line
+  for(const id in pos){const sp=P[id].spouse;if(!sp||!pos[sp])continue;const A=pos[sp],B=pos[id];
+    const ax=A.x+A.w/2,ay=A.y+BH+(P[sp].note?18:0),by=B.y+BH/2,bx=B.x>ax?B.x:B.x+B.w;
+    const e=document.createElementNS(NS,'path');e.setAttribute('d',`M${ax} ${ay}V${by}H${bx}`);e.setAttribute('class','edge wed');eg.append(e);
+    const t=document.createElementNS(NS,'text');t.setAttribute('class','wedl');t.setAttribute('x',(ax+bx)/2);t.setAttribute('y',by-8);t.setAttribute('text-anchor','middle');t.textContent='نکاح';eg.append(t)}
+  for(const id in pos){const p=pos[id],per=P[id];
+    const g=document.createElementNS(NS,'g');
+    g.setAttribute('class','node'+(meSet.has(id)?' me':'')+(label(per)?'':' blank')+(per.star==='p'?' pro':per.star==='k'?' key':'')+(per.pend?' pend':'')+(sel===id?' sel':''));
+    g.dataset.id=id;
+    const r=document.createElementNS(NS,'rect');r.setAttribute('x',p.x);r.setAttribute('y',p.y);r.setAttribute('width',p.w);r.setAttribute('height',BH+(per.note?18:0));r.setAttribute('rx',10);
+    const t=document.createElementNS(NS,'text');t.setAttribute('class','nm');t.setAttribute('x',p.x+p.w/2);t.setAttribute('y',p.y+BH/2+(per.star==='p'?9:8));t.setAttribute('text-anchor','middle');t.textContent=label(per);
+    g.append(r,t);
+    if(per.note){const n=document.createElementNS(NS,'text');n.setAttribute('class','note');n.setAttribute('x',p.x+p.w/2);n.setAttribute('y',p.y+BH+10);n.setAttribute('text-anchor','middle');n.textContent=per.note;g.append(n)}
+    ng.append(g)}
+  apply();
+  $('#empty').hidden=Object.keys(P).length>0;
+}
+function bounds(){let a=1e9,b=1e9,c=-1e9,d=-1e9;for(const id in pos){const p=pos[id];a=Math.min(a,p.x);b=Math.min(b,p.y);c=Math.max(c,p.x+p.w);d=Math.max(d,p.y+BH+20)}return{a,b,c,d}}
+function apply(){world.setAttribute('transform',`translate(${T.x} ${T.y}) scale(${T.k})`)}
+function fit(){const r=cvEl.getBoundingClientRect(),B=bounds();if(B.a>B.c)return;
+  const k=Math.min(r.width/(B.c-B.a+60),r.height/(B.d-B.b+60),1.2);T.k=Math.max(k,0.02);
+  T.x=(r.width-(B.c-B.a)*T.k)/2-B.a*T.k;T.y=30-B.b*T.k;apply()}
+function centerOn(id,k){const p=pos[id];if(!p)return;const r=cvEl.getBoundingClientRect();if(k)T.k=k;
+  T.x=r.width/2-(p.x+p.w/2)*T.k;T.y=r.height/2.6-(p.y+BH/2)*T.k;apply()}
+function zoomAt(f,cx,cy){const nk=Math.min(4,Math.max(0.02,T.k*f));T.x=cx-(cx-T.x)*nk/T.k;T.y=cy-(cy-T.y)*nk/T.k;T.k=nk;apply()}
+
+// pan / zoom / tap
+const ptrs=new Map();let downAt=null,moved=false,pinch=null;
+cvEl.addEventListener('pointerdown',e=>{if(e.target.closest('.zoom,.banner,.hint'))return;cvEl.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  downAt={x:e.clientX,y:e.clientY,tx:T.x,ty:T.y,t:e.target};moved=false;
+  if(ptrs.size===2){const [a,b]=[...ptrs.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),k:T.k,tx:T.x,ty:T.y,cx:(a.x+b.x)/2,cy:(a.y+b.y)/2}}});
+cvEl.addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId))return;ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  const r=cvEl.getBoundingClientRect();
+  if(ptrs.size===2&&pinch){const [a,b]=[...ptrs.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);const nk=Math.min(4,Math.max(0.02,pinch.k*d/pinch.d));
+    const cx=pinch.cx-r.left,cy=pinch.cy-r.top;T.x=cx-(cx-pinch.tx)*nk/pinch.k;T.y=cy-(cy-pinch.ty)*nk/pinch.k;T.k=nk;moved=true;apply();return}
+  if(!downAt)return;const dx=e.clientX-downAt.x,dy=e.clientY-downAt.y;if(Math.abs(dx)+Math.abs(dy)>6){moved=true;cvEl.classList.add('drag')}
+  if(moved){T.x=downAt.tx+dx;T.y=downAt.ty+dy;apply()}});
+function up(e){const wasTap=ptrs.size===1&&!moved&&downAt;ptrs.delete(e.pointerId);if(ptrs.size<2)pinch=null;cvEl.classList.remove('drag');
+  if(wasTap){const n=downAt.t.closest&&downAt.t.closest('.node');if(n)tapNode(n.dataset.id);else if(!picking)select(null)}
+  if(!ptrs.size)downAt=null}
+cvEl.addEventListener('pointerup',up);cvEl.addEventListener('pointercancel',up);
+cvEl.addEventListener('wheel',e=>{e.preventDefault();const r=cvEl.getBoundingClientRect();zoomAt(Math.exp(-e.deltaY*0.0015),e.clientX-r.left,e.clientY-r.top)},{passive:false});
+$('#zin').onclick=()=>{const r=cvEl.getBoundingClientRect();zoomAt(1.3,r.width/2,r.height/2)};
+$('#zout').onclick=()=>{const r=cvEl.getBoundingClientRect();zoomAt(1/1.3,r.width/2,r.height/2)};
+$('#zfit').onclick=fit;
+
+// ---- selection & panel
+function relText(id){const p=P[id];const f=P[p.parent];const wife=Object.keys(P).find(k=>P[k].spouse===id);const ks=kids(id).concat(wife?kids(wife):[]);
+  const fn=f?(label(f)||'(blank)'):'—';
+  const sons=ks.filter(k=>P[k].g!=='f'),daus=ks.filter(k=>P[k].g==='f');const L=a=>a.map(k=>`<span class="ur">${esc(label(P[k])||'(blank)')}</span>`).join('، ');
+  return `${p.g==='f'?'Daughter':'Son'} of <span class="ur">${esc(fn)}</span><br>Sons: ${sons.length?L(sons):'none recorded'}${daus.length?'<br>Daughters: '+L(daus):''}`}
+
+function select(id){sel=id;delArm=false;$('#delBtn').textContent='Delete';msg('');
+  $('#pEmpty').hidden=!!id;$('#pBody').hidden=!id;
+  if(id){const p=P[id];$('#who').textContent=label(p)||'(blank — unclear name)';$('#who').className='who'+(label(p)?'':' blank');
+    $('#rel').innerHTML=relText(id)+(p.local?'<br><b>Saved on this phone — it will be sent (and written in Urdu) when online.</b>':'');
+    $('#fName').value=p.name||'';$('#fNote').value=p.note||'';$('#fSon').value='';$('#addTo').textContent=label(p)||'(blank)';
+    const g=$('#guess');if(p.guess&&!label(p)){g.hidden=false;g.innerHTML=`Earlier reading (not certain): <span class="ur">${esc(p.guess)}</span>`}else g.hidden=true;
+    const hasKids=kids(id).length>0,pend=!!p.pend,own=!canWrite&&pend&&!!p.mine;
+    $('#gM').classList.toggle('on',p.g!=='f');$('#gF').classList.toggle('on',p.g==='f');['N','K','P'].forEach(c=>$('#hl'+c).classList.toggle('on',(p.star||'')===({N:'',K:'k',P:'p'})[c]));
+    $('#chFather').disabled=!p.parent;
+    $('#secAdd').hidden=!canAdd;$('#famAddNote').hidden=canWrite;$('#sugText').value='';$('#suggestMsg').textContent='';
+    $('#secFix').hidden=!(canWrite?!pend:own);$('#noteLbl').hidden=!canWrite;$('#secFix h3').textContent=own?'Correct the name you added':'Correct this name';
+    $('#secSug').hidden=canWrite||own;$('#secMore').hidden=!canWrite||pend;
+    $('#secPend').hidden=!pend;$('#pendOwner').hidden=!canWrite;
+    $('#pendBy').textContent=own?'You added this name. You can correct it above until Iftikhar approves it.':'Added by '+(p.by||'a family member')+'.';
+    $('#delBtn').hidden=!(canWrite&&!pend);$('#delBtn').disabled=hasKids;$('#delBtn').title=hasKids?'Remove or move the children first':'';
+    setKind(sugKind)}
+  document.querySelectorAll('.node').forEach(n=>n.classList.toggle('sel',n.dataset.id===id))}
+function tapNode(id){if(picking){finishPick(id);return}select(id)}
+function setKind(k){sugKind=k;document.querySelectorAll('.kind').forEach(b=>b.classList.toggle('on',b.dataset.kind===k));
+  $('#sugLbl').firstChild.textContent=({name:'Correct spelling',father:'Name of his correct father',other:'What is wrong?'})[k];
+  $('#sugText').placeholder=({name:'صحیح نام / correct name',father:'صحیح والد کا نام / correct father',other:'تفصیل / details'})[k]}
+document.querySelectorAll('.kind').forEach(b=>b.onclick=()=>setKind(b.dataset.kind));
+// ---- changes
+$('#saveBtn').onclick=()=>{if(!sel)return;const name=$('#fName').value.trim(),note=$('#fNote').value.trim();
+  if(!name&&!canWrite){msg('Type the name first.',true);return}
+  queue(canWrite?{op:'edit',id:sel,name,note}:{op:'edit',id:sel,name});msg(navigator.onLine?'Saved':'Saved on this phone — will be sent when online')};
+$('#fName').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#saveBtn').click()}});
+function addChild(g){if(!sel||!canAdd)return;const name=$('#fSon').value.trim();if(!name&&!canWrite){msg('Type the child’s name first.',true);$('#fSon').focus();return}
+  const id=rid('c');queue({op:'add',id,parent:sel,name,g,n:OUT.length});$('#fSon').value='';$('#fSon').focus();
+  msg((g==='f'?'Daughter':'Son')+' added'+(canWrite?'':' — waiting for Iftikhar’s approval')+(navigator.onLine?'':' (will be sent when online)'))}
+$('#addSon').onclick=()=>addChild('m');$('#addDau').onclick=()=>addChild('f');
+$('#fSon').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#addSon').click()}});
+const setF=(f,ok)=>{if(sel&&canWrite){queue({op:'set',id:sel,f});msg(ok)}};
+$('#hlN').onclick=()=>setF({star:''},'Highlight removed');$('#hlK').onclick=()=>setF({star:'k'},'Marked as important');$('#hlP').onclick=()=>setF({star:'p'},'Marked as a prophet');
+$('#gM').onclick=()=>setF({g:'m'},'Marked as son');$('#gF').onclick=()=>setF({g:'f'},'Marked as daughter');
+$('#chFather').onclick=()=>{if(!sel)return;picking=sel;cvEl.classList.add('picking');$('#bannerTxt').textContent=`Now tap the correct father of ${label(P[sel])||'this person'}`;$('#banner').hidden=false};
+$('#cancelPick').onclick=()=>{picking=null;cvEl.classList.remove('picking');$('#banner').hidden=true};
+function finishPick(fid){const child=picking;$('#cancelPick').click();
+  if(fid===child){msg('A person can’t be his own father.',true);return}
+  if(ancestors(fid).has(child)){msg('That would make him his own ancestor.',true);return}
+  queue({op:'set',id:child,f:{parent:fid}});sel=child;msg('Father changed')}
+function move(dir){if(!sel)return;const sib=kids(P[sel].parent),i=sib.indexOf(sel),j=i+dir;if(j<0||j>=sib.length)return;
+  const arr=sib.slice();[arr[i],arr[j]]=[arr[j],arr[i]];arr.forEach((k,n)=>{if((P[k].order??-1)!==n){OUT.push({op:'set',id:k,f:{order:n}})}});keep('out',OUT);rebuild();sync();msg('Order changed')}
+$('#mvR').onclick=()=>move(-1);$('#mvL').onclick=()=>move(1);
+$('#delBtn').onclick=()=>{if(!sel||kids(sel).length||!canWrite)return;if(!delArm){delArm=true;$('#delBtn').textContent='Tap again to delete';return}
+  queue({op:'delete',id:sel});select(null);msg('Deleted')};
+function approveOne(id){const p=P[id];if(!p||!p.pend)return false;if(!P[p.parent]||P[p.parent].pend){msg('Approve his father first.',true);return false}
+  OUT.push({op:'approve',id});keep('out',OUT);P[id].pend=0;return true}
+$('#apprBtn').onclick=()=>{if(sel&&approveOne(sel)){rebuild();sync();msg('Approved')}};
+$('#apprAll').onclick=()=>{let n=0,again=true;while(again){again=false;for(const id of Object.keys(P).filter(k=>P[k].pend)){if(P[P[id].parent]&&!P[P[id].parent].pend){OUT.push({op:'approve',id});P[id].pend=0;n++;again=true}}}
+  keep('out',OUT);rebuild();sync();msg(n?`Approved ${n} new ${n===1?'entry':'entries'}`:'Nothing to approve.')};
+$('#rejBtn').onclick=()=>{if(!sel||!P[sel].pend)return;if(kids(sel).length){msg('Reject his children first.',true);return}queue({op:'reject',id:sel});select(null);msg('Rejected')};
+$('#suggestBtn').onclick=()=>{const m=$('#suggestMsg'),text=$('#sugText').value.trim();if(!text){m.textContent='Write your suggestion first.';return}
+  queue({op:'suggest',sid:rid('s'),person:sel,kind:sugKind,text});$('#sugText').value='';m.textContent=navigator.onLine?'Thank you. Your suggestion was sent to Iftikhar.':'Saved — it will be sent to Iftikhar when you are online.'};
+$('#focusBtn').onclick=()=>{if(!sel)return;viewRoot=sel;viewMode='focus';setModeButtons();draw();fit()};
+function setModeButtons(){$('#vStart').classList.toggle('on',viewMode==='start');$('#vAll').classList.toggle('on',viewMode==='all')}
+$('#vStart').onclick=()=>{viewMode='start';viewRoot=settings.start||null;setModeButtons();draw();fit()};
+$('#vAll').onclick=()=>{viewMode='all';viewRoot=null;setModeButtons();draw();fit()};
+// search
+$('#q').addEventListener('input',()=>{const q=$('#q').value.trim();const box=$('#res');
+  if(!q){box.hidden=true;return}
+  const hits=Object.keys(P).filter(k=>(P[k].name||'').includes(q)||(P[k].guess||'').includes(q)).slice(0,25);
+  box.innerHTML=hits.length?hits.map(k=>{const f=P[P[k].parent];return `<button type="button" data-id="${k}">${esc(label(P[k])||P[k].guess+' ؟')}<small>${P[k].g==='f'?'daughter':'son'} of ${esc(f?label(f)||'—':'—')}</small></button>`}).join(''):'<div class="meta" style="padding:8px 12px">No match</div>';
+  box.hidden=false});
+$('#res').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const id=b.dataset.id;$('#res').hidden=true;$('#q').value='';
+  if(!pos[id]){viewMode='all';viewRoot=null;setModeButtons();draw()}select(id);centerOn(id,Math.max(T.k,0.8))});
+
+// ---- owner: new entries, suggestions, people, history
+function pendCount(){const n=Object.keys(P).filter(k=>P[k].pend).length,b=$('#pendList');b.textContent=n?`New entries (${n})`:'New entries';b.classList.toggle('has',!!n);
+  const s=(DATA&&DATA.suggestions||[]).filter(x=>!OUT.some(o=>o.op==='resolve'&&o.sid===x.sid)).length;$('#sugList').textContent=s?`Suggestions (${s})`:'Suggestions'}
+function modal(title,html){$('#sugTitle').textContent=title;$('#sugBody').innerHTML=html;$('#sugM').hidden=false}
+$('#sugX').onclick=()=>{$('#sugM').hidden=true};
+function showPend(){const ids=Object.keys(P).filter(k=>P[k].pend);
+  modal('New entries waiting for approval',ids.length?ids.map(id=>{const x=P[id],f=P[x.parent];return `<div class="sugg"><div><b>${esc(x.by||'Family')}</b> added a ${x.g==='f'?'daughter':'son'} under <span class="ur">${esc(f?label(f)||'—':'—')}</span></div><div class="t">${esc(x.name)}</div>
+    <div class="row"><button type="button" data-appr="${esc(id)}">Approve</button><button type="button" data-go="${esc(id)}">Show in tree</button></div></div>`}).join(''):'Nothing is waiting for approval.')}
+function showSugs(){const L=(DATA&&DATA.suggestions||[]).filter(x=>!OUT.some(o=>o.op==='resolve'&&o.sid===x.sid));
+  modal('Suggestions from family',L.length?L.map(x=>`<div class="sugg"><div><b>${esc(x.by)}</b> — ${esc(x.kind)} — about <span class="ur">${esc(x.person_name||'—')}</span></div><div class="t">${esc(x.text)}</div>
+    <div class="row"><button type="button" data-go="${esc(x.person)}">Show person</button><button type="button" data-done="${esc(x.sid)}">Done</button></div></div>`).join(''):'No open suggestions.')}
+$('#pendList').onclick=showPend;$('#sugList').onclick=showSugs;
+$('#sugBody').addEventListener('click',e=>{const g=e.target.closest('[data-go]'),d=e.target.closest('[data-done]'),a=e.target.closest('[data-appr]');
+  if(g){const id=g.dataset.go;$('#sugM').hidden=true;if(P[id]){if(!pos[id]){viewMode='all';viewRoot=null;setModeButtons();draw()}select(id);centerOn(id,Math.max(T.k,0.8))}}
+  if(d){queue({op:'resolve',sid:d.dataset.done});showSugs()}
+  if(a){if(approveOne(a.dataset.appr)){rebuild();sync();showPend()}else{$('#sugBody').insertAdjacentHTML('afterbegin','<div class="msg err">Approve his father first.</div>')}}});
+$('#histBtn').onclick=async()=>{modal('History of changes','Loading…');try{const j=await api('/api/history');
+    $('#sugBody').innerHTML=j.history.length?j.history.map(h=>`<div class="hist">${esc(new Date(h.at).toLocaleString('en-GB'))} — <b>${esc(h.who)}</b> ${esc(h.action)}${h.before?`: <span class="ur">${esc(h.before)}</span> →`:''} <span class="ur">${esc(h.after)}</span></div>`).join(''):'Nothing yet.'}
+  catch(e){$('#sugBody').textContent=e.net?'Needs internet.':'Could not load.'}};
+async function showUsers(){const L=$('#uList');$('#usrM').hidden=false;L.textContent='Loading…';
+  try{const j=await api('/api/people');if(!j.people.length){L.textContent='No personal links yet.';return}
+    L.innerHTML=j.people.map(u=>`<div class="sugg"><div><b>${esc(u.name)}</b> — ${u.cancelled?'<span style="color:var(--warn)">cancelled</span>':u.opened?'opened on a phone':'not opened yet'} · ${u.role==='viewer'?'view &amp; suggest only':'can add names'}</div>
+      ${!u.cancelled&&!u.opened?`<input class="lnk" readonly value="${esc(u.link)}" aria-label="Link for ${esc(u.name)}"><div class="row"><button type="button" data-share="${esc(u.link)}" data-n="${esc(u.name)}">Share link</button></div>`:''}
+      <div class="row">${u.cancelled?`<button type="button" data-act="restore" data-code="${esc(u.code)}">Restore</button>`:`<button type="button" data-act="cancel" data-code="${esc(u.code)}">Cancel access</button>`}
+      <button type="button" data-act="renew" data-code="${esc(u.code)}">New link (new phone)</button>
+      <button type="button" data-act="role" data-code="${esc(u.code)}" data-role="${u.role==='viewer'?'family':'viewer'}">${u.role==='viewer'?'Allow adding':'Make view-only'}</button></div></div>`).join('')}
+  catch(e){L.textContent=e.net?'Managing people needs internet.':'Could not load.'}}
+async function shareLink(link,name){const text='السلام علیکم۔ یہ آپ کا ذاتی شجرہ لنک ہے۔ یہ صرف ایک فون پر کھلے گا، کسی کو فارورڈ نہ کریں۔\nYour personal Shajarah link (opens on one phone only):\n'+link;
+  try{if(navigator.share){await navigator.share({title:'Shajarah — '+name,text});return}}catch(e){return}
+  try{await navigator.clipboard.writeText(text);toast('Link copied — paste it in WhatsApp')}catch(e){toast('Select the link and copy it',true)}}
+$('#usersBtn').onclick=showUsers;$('#usrX').onclick=()=>{$('#usrM').hidden=true};
+$('#uGo').onclick=async()=>{const n=$('#uName').value.trim();if(!n){$('#uNew').textContent='Type the person’s name first.';return}
+  $('#uGo').disabled=true;try{const r=await api('/api/people',{method:'POST',body:JSON.stringify({name:n,role:$('#uAdd').checked?'family':'viewer'})});$('#uName').value='';
+    $('#uNew').innerHTML=`Link for <b>${esc(n)}</b> is ready.`;shareLink(r.link,n);showUsers()}
+  catch(e){$('#uNew').textContent=e.net?'Needs internet.':'Could not make the link.'}finally{$('#uGo').disabled=false}};
+$('#uList').addEventListener('click',async e=>{const s=e.target.closest('[data-share]');if(s){shareLink(s.dataset.share,s.dataset.n);return}
+  const b=e.target.closest('[data-act]');if(!b)return;b.disabled=true;
+  try{const r=await api('/api/people/'+b.dataset.code+'/'+b.dataset.act,{method:'POST',body:JSON.stringify({role:b.dataset.role||''})});
+    if(b.dataset.act==='renew'){const nm=b.closest('.sugg').querySelector('b').textContent;$('#uNew').innerHTML=`New link for <b>${esc(nm)}</b> is ready. The old link and old phone no longer work.`;shareLink(r.link,nm)}
+    showUsers()}catch(err){b.disabled=false;$('#uNew').textContent=err.net?'Needs internet.':'Could not change it.'}});
+$('#uList').addEventListener('focusin',e=>{if(e.target.select)e.target.select()});
+
+// ---- start
+async function start(){
+  if(!cfg.c){setupScreen();return}
+  if(IOS&&!INSTALLED&&!load('noinst')&&!navigator.webdriver){screen('scrInstall');return}
+  if(DATA){setMe(DATA.me);rebuild()}
+  if(DATA&&DATA.me&&DATA.me.owner&&!PIN){askPin('enter');return}
+  screen(null);if(!DATA)$('#empty').textContent=navigator.onLine?'Connecting to the Shajarah…':'No internet. Connect once to download the Shajarah.';
+  await sync();if(!DATA&&!$('#app').hidden)$('#empty').textContent='The server could not be reached. It will keep trying.'}
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});
+  let reloading=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(reloading||!DATA)return;reloading=true;location.reload()})}
+(async()=>{try{await document.fonts.load('19px "Nastaliq"');await document.fonts.load('700 19px "Nastaliq"')}catch(e){}start()})();
+</script>
+</body></html>

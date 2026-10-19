@@ -160,6 +160,10 @@ input,textarea{-webkit-user-select:text;user-select:text}
 .wm{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4}
 .wm text{font-family:var(--ui);font-size:22px;font-weight:700;fill:var(--fg);opacity:.14}
 .lnk{font:inherit;font-size:.85rem;width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--rule);background:var(--bg);color:var(--fg)}
+body.ro.away #app,body.ro.away .modal{filter:blur(28px)}
+.node.hid rect{stroke-dasharray:3 3;opacity:.6}
+.node.hid text{opacity:.6}
+.hidnote{font-size:.85rem;color:var(--warn);font-weight:600}
 body.ro{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
 @media print{body.ro *{display:none!important}body.ro::after{content:"Printing the Shajarah is not allowed.";display:block;padding:40px;font:20px sans-serif}}
@@ -181,14 +185,15 @@ body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
   <img class="logo" src="icon-192.png" alt="">
   <h1>شجرۃ الطیبہ</h1>
   <p class="strong">First, put the app on your home screen</p>
-  <ol>
+  <div id="insAnd" hidden><p>Tap <b>Install</b>, then open <b>Shajarah</b> from your home screen.</p><button type="button" class="primary" id="insAndGo">Install</button></div>
+  <ol id="insIos">
     <li>Tap <b>Copy my link</b> below.</li>
     <li>Tap the <b>Share</b> button at the bottom of Safari.</li>
     <li>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</li>
     <li>Open <b>Shajarah</b> from your home screen and paste the link.</li>
   </ol>
   <button type="button" class="primary" id="copyLink">Copy my link</button>
-  <button type="button" class="link" id="noInstall">Use it in Safari instead</button>
+  <button type="button" class="link" id="noInstall">Use it in the browser instead</button>
 </div></div>
 
 <div class="screen" id="scrPin" hidden><div class="card">
@@ -253,6 +258,8 @@ body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
           <h3>Is this name or his father wrong?</h3>
           <div class="meta">Names already in the Shajarah are locked. Tell Iftikhar what is wrong and he will check it.</div>
           <div class="row" role="radiogroup" aria-label="What is wrong"><button type="button" class="kind on" data-kind="name">Wrong spelling</button><button type="button" class="kind" data-kind="father">Wrong father</button><button type="button" class="kind" data-kind="other">Other</button></div>
+          <div id="sugFatherBox" hidden class="box" style="padding:10px"><div class="meta">Who is his correct father? Tap the button, then tap the correct father in the tree.</div>
+            <button type="button" id="sugPickBtn">Pick the correct father in the tree</button><div class="meta" id="sugPicked"></div></div>
           <label class="field" id="sugLbl">Correct spelling<textarea id="sugText" aria-label="Your suggestion"></textarea></label>
           <button type="button" class="primary" id="suggestBtn">Send suggestion</button>
           <div class="meta" id="suggestMsg" aria-live="polite"></div>
@@ -260,6 +267,8 @@ body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
         <div id="secMore" style="display:flex;flex-direction:column;gap:12px"><h2>More</h2>
           <div class="row"><span class="meta" style="align-self:center">Highlight:</span><button type="button" id="hlN">None</button><button type="button" id="hlK">Important</button><button type="button" id="hlP">Prophet</button></div>
           <div class="row"><span class="meta" style="align-self:center">This person is a:</span><button type="button" id="gM">Son</button><button type="button" id="gF">Daughter</button></div>
+          <div class="row"><span class="meta" style="align-self:center">Family can see:</span><button type="button" id="visShow">Show</button><button type="button" id="visHide">Hide</button></div>
+          <div class="hidnote" id="hidNote" hidden></div>
           <div class="row">
             <button type="button" id="chFather">Change father</button>
             <button type="button" id="mvR" title="Move towards the right (elder side)">◀ Move</button>
@@ -304,7 +313,7 @@ let DATA=load('tree');                   // the last tree received from the serv
 let OUT=load('out')||[];                 // changes made on this phone that the server has not received yet
 let PIN=null, server=null, syncing=false, finding=null, ME=DATA&&DATA.me||null;
 let P={}, settings={}, canWrite=false, canAdd=false, sugKind='name';
-let viewRoot=null, viewMode='start', sel=null, picking=null, delArm=false;
+let viewRoot=null, viewMode='start', sel=null, picking=null, delArm=false, sugPicking=null, sugFather=null;
 let pos={}, T={x:0,y:0,k:1}, first=true;
 const sampler=null;
 const BH=50, GAP=10, LEVEL=40, PAD=14;
@@ -344,6 +353,7 @@ async function api(path,opts){const s=await findServer();if(!s)throw{net:true};l
   try{r=await fx(s+path+(path.includes('?')?'&':'?')+'_='+Date.now(),Object.assign({},opts,{headers:h}),(opts&&opts.ms)||60000)}catch(e){server=null;throw{net:true}}
   if(r.status===401){const e=await r.json().catch(()=>({}));
     if(e.error==='device'){blocked();throw{stop:true}}
+    if(e.error==='expired'){blocked('expired');throw{stop:true}}
     if(e.error==='setpin'){askPin('set');throw{stop:true}}
     if(e.error==='pin'){PIN=null;askPin('enter',e.locked?'Too many wrong tries. Wait 15 minutes.':'Wrong PIN. Try again.');throw{stop:true}}
     revoked(e.error==='cancelled');throw{stop:true}}
@@ -358,7 +368,7 @@ function applyLocal(base){const M={};for(const k in base)M[k]=Object.assign({},b
   OUT.forEach(o=>{const x=M[o.id];
     if(o.op==='add'&&!M[o.id]&&M[o.parent])M[o.id]={name:o.name,parent:o.parent,order:9999+(o.n||0),g:o.g,note:'',star:'',spouse:'',guess:'',pend:ME&&ME.owner?0:1,mine:1,local:1,by:ME?ME.name:''};
     else if(o.op==='edit'&&x){x.name=o.name;if(typeof o.note==='string')x.note=o.note;x.local=1}
-    else if(o.op==='set'&&x){Object.assign(x,o.f);x.local=1}
+    else if(o.op==='set'&&x){const f=Object.assign({},o.f);if(f.vis){x.hid=f.vis==='hide'?1:0;delete f.vis}Object.assign(x,f);x.local=1}
     else if(o.op==='approve'&&x)x.pend=0;
     else if((o.op==='reject'||o.op==='delete')&&x)delete M[o.id]});
   return M}
@@ -393,8 +403,9 @@ function showApp(){if(ME&&ME.owner&&!PIN)return;screen(null);rebuild()}
 function setupScreen(title,msg){screen('scrSetup');if(title)$('#setupTitle').textContent=title;if(msg)$('#setupMsg').textContent=msg}
 function revoked(cancelled){DATA=null;OUT=[];keep('tree',null);keep('out',[]);keep('pinv',null);const was=cfg.c;cfg={};keep('cfg',cfg);PIN=null;P={};world.textContent='';
   setupScreen(cancelled?'Your access has been cancelled.':'This link no longer works.','Your access may have been cancelled or replaced. Ask Iftikhar for a new personal link.')}
-function blocked(){DATA=null;OUT=[];keep('tree',null);keep('out',[]);cfg={};keep('cfg',cfg);P={};world.textContent='';
-  setupScreen('This link is already used on another phone.','Each link works on one phone only. Ask Iftikhar for your own link.')}
+function blocked(why){DATA=null;OUT=[];keep('tree',null);keep('out',[]);cfg={};keep('cfg',cfg);P={};world.textContent='';
+  if(why==='expired')setupScreen('This link has expired.','A link must be opened within 3 days. Ask Iftikhar for a new one.');
+  else setupScreen('This link is already used on another phone.','Each link works on one phone only. Ask Iftikhar for your own link.')}
 $('#pasteGo').onclick=()=>{if(takeLink($('#pasteLink').value)){$('#setupErr').textContent='';$('#pasteLink').value='';start()}else $('#setupErr').textContent='That is not a Shajarah link. Paste the full link you were sent.'};
 $('#resetBtn').onclick=async()=>{if(!confirmReset()){return}try{localStorage.clear()}catch(e){}try{const ks=await caches.keys();await Promise.all(ks.map(k=>caches.delete(k)))}catch(e){}location.reload()};
 let resetArm=0;function confirmReset(){if(Date.now()-resetArm<4000)return true;resetArm=Date.now();$('#resetBtn').textContent='Tap again to reset (everything on this phone is forgotten)';return false}
@@ -414,7 +425,13 @@ $('#pinGo').onclick=async()=>{const a=$('#pin1').value.trim(),b=$('#pin2').value
 // install
 const INSTALLED=!!(navigator.standalone||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches));
 const IOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
-let instEv=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();instEv=e;$('#instBar').hidden=false});
+let instEv=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();instEv=e;
+  if(cfg.c&&!INSTALLED&&!load('noinst')&&!navigator.webdriver){screen('scrInstall');$('#insAnd').hidden=false;$('#insIos').hidden=true;$('#copyLink').hidden=true}else $('#instBar').hidden=false});
+$('#insAndGo').onclick=async()=>{if(!instEv)return;instEv.prompt();try{const c=await instEv.userChoice;if(c&&c.outcome==='accepted'){$('#insAnd').querySelector('p').textContent='Installed. Open Shajarah from your home screen.';$('#insAndGo').hidden=true}}catch(e){}};
+window.addEventListener('appinstalled',()=>{$('#instBar').hidden=true});
+// the tree is blurred when the app is in the background, so it does not show in the app switcher
+document.addEventListener('visibilitychange',()=>document.body.classList.toggle('away',document.hidden));
+window.addEventListener('blur',()=>document.body.classList.add('away'));window.addEventListener('focus',()=>document.body.classList.remove('away'));
 $('#instGo').onclick=async()=>{if(!instEv)return;instEv.prompt();try{await instEv.userChoice}catch(e){}$('#instBar').hidden=true};
 $('#copyLink').onclick=async()=>{const L=location.origin+location.pathname+'?t='+cfg.t+'&c='+cfg.c+(cfg.s?'&s='+cfg.s.replace('https://',''):'');
   try{await navigator.clipboard.writeText(L);$('#copyLink').textContent='Copied ✓'}catch(e){$('#copyLink').textContent='Could not copy — use the link you were sent'}};
@@ -510,7 +527,7 @@ function draw(){
     const t=document.createElementNS(NS,'text');t.setAttribute('class','wedl');t.setAttribute('x',(ax+bx)/2);t.setAttribute('y',by-8);t.setAttribute('text-anchor','middle');t.textContent='نکاح';eg.append(t)}
   for(const id in pos){const p=pos[id],per=P[id];
     const g=document.createElementNS(NS,'g');
-    g.setAttribute('class','node'+(meSet.has(id)?' me':'')+(label(per)?'':' blank')+(per.star==='p'?' pro':per.star==='k'?' key':'')+(per.pend?' pend':'')+(sel===id?' sel':''));
+    g.setAttribute('class','node'+(meSet.has(id)?' me':'')+(label(per)?'':' blank')+(per.star==='p'?' pro':per.star==='k'?' key':'')+(per.pend?' pend':'')+(per.hid?' hid':'')+(sel===id?' sel':''));
     g.dataset.id=id;
     const r=document.createElementNS(NS,'rect');r.setAttribute('x',p.x);r.setAttribute('y',p.y);r.setAttribute('width',p.w);r.setAttribute('height',BH+(per.note?18:0));r.setAttribute('rx',10);
     const t=document.createElementNS(NS,'text');t.setAttribute('class','nm');t.setAttribute('x',p.x+p.w/2);t.setAttribute('y',p.y+BH/2+(per.star==='p'?9:8));t.setAttribute('text-anchor','middle');t.textContent=label(per);
@@ -570,12 +587,20 @@ function select(id){sel=id;delArm=false;$('#delBtn').textContent='Delete';msg(''
     $('#secPend').hidden=!pend;$('#pendOwner').hidden=!canWrite;
     $('#pendBy').textContent=own?'You added this name. You can correct it above until Iftikhar approves it.':'Added by '+(p.by||'a family member')+'.';
     $('#delBtn').hidden=!(canWrite&&!pend);$('#delBtn').disabled=hasKids;$('#delBtn').title=hasKids?'Remove or move the children first':'';
+    if(!sugPicking&&sugFather&&$('#sugPicked').dataset.for!==id){sugFather=null;$('#sugPicked').textContent=''}$('#sugPicked').dataset.for=id;
+    $('#hidNote').hidden=!p.hid;$('#hidNote').textContent=p.hid===1?'Hidden from family (only you see this name).':p.hid===2?'Hidden from family because a parent above is hidden.':'';
+    $('#visShow').classList.toggle('on',canWrite&&!p.hid);$('#visHide').classList.toggle('on',canWrite&&p.hid===1);
     setKind(sugKind)}
   document.querySelectorAll('.node').forEach(n=>n.classList.toggle('sel',n.dataset.id===id))}
-function tapNode(id){if(picking){finishPick(id);return}select(id)}
+function tapNode(id){if(picking){finishPick(id);return}
+  if(sugPicking){const who=sugPicking;sugPicking=null;$('#cancelPick').click();if(id===who||ancestors(id).has(who)){select(who);msg('That cannot be his father.',true);return}
+    sugFather=id;select(who);setKind('father');$('#sugPicked').innerHTML='Correct father: <span class="ur">'+esc(label(P[id])||'—')+'</span>';return}
+  select(id)}
+$('#sugPickBtn').onclick=()=>{if(!sel)return;sugPicking=sel;cvEl.classList.add('picking');$('#bannerTxt').textContent='Now tap the correct father of '+(label(P[sel])||'this person');$('#banner').hidden=false;
+  if(matchMedia('(max-width:760px)').matches)$('#cv').scrollIntoView()};
 function setKind(k){sugKind=k;document.querySelectorAll('.kind').forEach(b=>b.classList.toggle('on',b.dataset.kind===k));
-  $('#sugLbl').firstChild.textContent=({name:'Correct spelling',father:'Name of his correct father',other:'What is wrong?'})[k];
-  $('#sugText').placeholder=({name:'صحیح نام / correct name',father:'صحیح والد کا نام / correct father',other:'تفصیل / details'})[k]}
+  $('#sugLbl').firstChild.textContent=({name:'Correct spelling',father:'Or write his correct father’s name (optional)',other:'What is wrong?'})[k];
+  $('#sugFatherBox').hidden=k!=='father';$('#sugText').placeholder=({name:'صحیح نام / correct name',father:'صحیح والد کا نام / correct father',other:'تفصیل / details'})[k]}
 document.querySelectorAll('.kind').forEach(b=>b.onclick=()=>setKind(b.dataset.kind));
 // ---- changes
 $('#saveBtn').onclick=()=>{if(!sel)return;const name=$('#fName').value.trim(),note=$('#fNote').value.trim();
@@ -589,9 +614,10 @@ $('#addSon').onclick=()=>addChild('m');$('#addDau').onclick=()=>addChild('f');
 $('#fSon').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#addSon').click()}});
 const setF=(f,ok)=>{if(sel&&canWrite){queue({op:'set',id:sel,f});msg(ok)}};
 $('#hlN').onclick=()=>setF({star:''},'Highlight removed');$('#hlK').onclick=()=>setF({star:'k'},'Marked as important');$('#hlP').onclick=()=>setF({star:'p'},'Marked as a prophet');
+$('#visShow').onclick=()=>setF({vis:'show'},'Shown to family');$('#visHide').onclick=()=>setF({vis:'hide'},'Hidden from family');
 $('#gM').onclick=()=>setF({g:'m'},'Marked as son');$('#gF').onclick=()=>setF({g:'f'},'Marked as daughter');
 $('#chFather').onclick=()=>{if(!sel)return;picking=sel;cvEl.classList.add('picking');$('#bannerTxt').textContent=`Now tap the correct father of ${label(P[sel])||'this person'}`;$('#banner').hidden=false};
-$('#cancelPick').onclick=()=>{picking=null;cvEl.classList.remove('picking');$('#banner').hidden=true};
+$('#cancelPick').onclick=()=>{picking=null;sugPicking=null;cvEl.classList.remove('picking');$('#banner').hidden=true};
 function finishPick(fid){const child=picking;$('#cancelPick').click();
   if(fid===child){msg('A person can’t be his own father.',true);return}
   if(ancestors(fid).has(child)){msg('That would make him his own ancestor.',true);return}
@@ -607,8 +633,9 @@ $('#apprBtn').onclick=()=>{if(sel&&approveOne(sel)){rebuild();sync();msg('Approv
 $('#apprAll').onclick=()=>{let n=0,again=true;while(again){again=false;for(const id of Object.keys(P).filter(k=>P[k].pend)){if(P[P[id].parent]&&!P[P[id].parent].pend){OUT.push({op:'approve',id});P[id].pend=0;n++;again=true}}}
   keep('out',OUT);rebuild();sync();msg(n?`Approved ${n} new ${n===1?'entry':'entries'}`:'Nothing to approve.')};
 $('#rejBtn').onclick=()=>{if(!sel||!P[sel].pend)return;if(kids(sel).length){msg('Reject his children first.',true);return}queue({op:'reject',id:sel});select(null);msg('Rejected')};
-$('#suggestBtn').onclick=()=>{const m=$('#suggestMsg'),text=$('#sugText').value.trim();if(!text){m.textContent='Write your suggestion first.';return}
-  queue({op:'suggest',sid:rid('s'),person:sel,kind:sugKind,text});$('#sugText').value='';m.textContent=navigator.onLine?'Thank you. Your suggestion was sent to Iftikhar.':'Saved — it will be sent to Iftikhar when you are online.'};
+$('#suggestBtn').onclick=()=>{const m=$('#suggestMsg'),text=$('#sugText').value.trim(),fa=sugKind==='father'?sugFather:null;
+  if(!text&&!fa){m.textContent=sugKind==='father'?'Pick the correct father, or write his name.':'Write your suggestion first.';return}
+  queue({op:'suggest',sid:rid('s'),person:sel,kind:sugKind,text,father:fa||''});$('#sugText').value='';sugFather=null;$('#sugPicked').textContent='';m.textContent=navigator.onLine?'Thank you. Your suggestion was sent to Iftikhar.':'Saved — it will be sent to Iftikhar when you are online.'};
 $('#focusBtn').onclick=()=>{if(!sel)return;viewRoot=sel;viewMode='focus';setModeButtons();draw();fit()};
 function setModeButtons(){$('#vStart').classList.toggle('on',viewMode==='start');$('#vAll').classList.toggle('on',viewMode==='all')}
 $('#vStart').onclick=()=>{viewMode='start';viewRoot=settings.start||null;setModeButtons();draw();fit()};
@@ -632,19 +659,22 @@ function showPend(){const ids=Object.keys(P).filter(k=>P[k].pend);
     <div class="row"><button type="button" data-appr="${esc(id)}">Approve</button><button type="button" data-go="${esc(id)}">Show in tree</button></div></div>`}).join(''):'Nothing is waiting for approval.')}
 function showSugs(){const L=(DATA&&DATA.suggestions||[]).filter(x=>!OUT.some(o=>o.op==='resolve'&&o.sid===x.sid));
   modal('Suggestions from family',L.length?L.map(x=>`<div class="sugg"><div><b>${esc(x.by)}</b> — ${esc(x.kind)} — about <span class="ur">${esc(x.person_name||'—')}</span></div><div class="t">${esc(x.text)}</div>
-    <div class="row"><button type="button" data-go="${esc(x.person)}">Show person</button><button type="button" data-done="${esc(x.sid)}">Done</button></div></div>`).join(''):'No open suggestions.')}
+    ${x.father?`<div>Suggested correct father: <span class="ur">${esc(x.father_name)}</span></div>`:''}
+    <div class="row"><button type="button" data-go="${esc(x.person)}">Show person</button>${x.father&&P[x.person]&&P[x.father]?`<button type="button" data-fix="${esc(x.sid)}" data-p="${esc(x.person)}" data-f="${esc(x.father)}">Apply: change his father</button>`:''}<button type="button" data-done="${esc(x.sid)}">Done</button></div></div>`).join(''):'No open suggestions.')}
 $('#pendList').onclick=showPend;$('#sugList').onclick=showSugs;
 $('#sugBody').addEventListener('click',e=>{const g=e.target.closest('[data-go]'),d=e.target.closest('[data-done]'),a=e.target.closest('[data-appr]');
   if(g){const id=g.dataset.go;$('#sugM').hidden=true;if(P[id]){if(!pos[id]){viewMode='all';viewRoot=null;setModeButtons();draw()}select(id);centerOn(id,Math.max(T.k,0.8))}}
   if(d){queue({op:'resolve',sid:d.dataset.done});showSugs()}
+  const fx2=e.target.closest('[data-fix]');if(fx2){const c=fx2.dataset.p,f=fx2.dataset.f;if(f===c||ancestors(f).has(c)){toast('That would make him his own ancestor.',true);return}
+    OUT.push({op:'set',id:c,f:{parent:f}});OUT.push({op:'resolve',sid:fx2.dataset.fix});keep('out',OUT);rebuild();sync();showSugs();toast('Father changed')}
   if(a){if(approveOne(a.dataset.appr)){rebuild();sync();showPend()}else{$('#sugBody').insertAdjacentHTML('afterbegin','<div class="msg err">Approve his father first.</div>')}}});
 $('#histBtn').onclick=async()=>{modal('History of changes','Loading…');try{const j=await api('/api/history');
     $('#sugBody').innerHTML=j.history.length?j.history.map(h=>`<div class="hist">${esc(new Date(h.at).toLocaleString('en-GB'))} — <b>${esc(h.who)}</b> ${esc(h.action)}${h.before?`: <span class="ur">${esc(h.before)}</span> →`:''} <span class="ur">${esc(h.after)}</span></div>`).join(''):'Nothing yet.'}
   catch(e){$('#sugBody').textContent=e.net?'Needs internet.':'Could not load.'}};
 async function showUsers(){const L=$('#uList');$('#usrM').hidden=false;L.textContent='Loading…';
   try{const j=await api('/api/people');if(!j.people.length){L.textContent='No personal links yet.';return}
-    L.innerHTML=j.people.map(u=>`<div class="sugg"><div><b>${esc(u.name)}</b> — ${u.cancelled?'<span style="color:var(--warn)">cancelled</span>':u.opened?'opened on a phone':'not opened yet'} · ${u.role==='viewer'?'view &amp; suggest only':'can add names'}</div>
-      ${!u.cancelled&&!u.opened?`<input class="lnk" readonly value="${esc(u.link)}" aria-label="Link for ${esc(u.name)}"><div class="row"><button type="button" data-share="${esc(u.link)}" data-n="${esc(u.name)}">Share link</button></div>`:''}
+    L.innerHTML=j.people.map(u=>`<div class="sugg"><div><b>${esc(u.name)}</b> — ${u.cancelled?'<span style="color:var(--warn)">cancelled</span>':u.opened?'opened on a phone':u.expired?'<span style="color:var(--warn)">link expired — make a new link</span>':'not opened yet (link works for 3 days)'} · ${u.role==='viewer'?'view &amp; suggest only':'can add names'}</div>
+      ${!u.cancelled&&!u.opened&&!u.expired?`<input class="lnk" readonly value="${esc(u.link)}" aria-label="Link for ${esc(u.name)}"><div class="row"><button type="button" data-share="${esc(u.link)}" data-n="${esc(u.name)}">Share link</button></div>`:''}
       <div class="row">${u.cancelled?`<button type="button" data-act="restore" data-code="${esc(u.code)}">Restore</button>`:`<button type="button" data-act="cancel" data-code="${esc(u.code)}">Cancel access</button>`}
       <button type="button" data-act="renew" data-code="${esc(u.code)}">New link (new phone)</button>
       <button type="button" data-act="role" data-code="${esc(u.code)}" data-role="${u.role==='viewer'?'family':'viewer'}">${u.role==='viewer'?'Allow adding':'Make view-only'}</button></div></div>`).join('')}

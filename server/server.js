@@ -7,7 +7,7 @@
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto'), os = require('os');
 const { spawn } = require('child_process');
 
-const VERSION = 1;
+const VERSION = 2;
 const ROOT = __dirname, DATA = path.join(ROOT, 'data'), BACK = path.join(DATA, 'backups');
 const CFG = path.join(DATA, 'config.json'), TREE = path.join(DATA, 'tree.json'), HIST = path.join(DATA, 'history.jsonl');
 const APP_URL = process.env.SJ_APP_URL || 'https://wwdb96thfb-netizen.github.io/Shajarah/';
@@ -132,8 +132,10 @@ async function applyOps(user, ops) {
 function applyOne(user, o, urdu) {
   const owner = !!user.owner, P = tree.people;
   const need = c => { if (!c) throw new Error(user.role === 'viewer' ? 'Restricted: you can only view and suggest.' : 'Only Iftikhar can do this.'); };
+  const hid = id => !owner && hiddenSet().has(id) && !(P[id] && P[id].status === 'pending' && P[id].added_code === idOf(user.code));
   if (o.op === 'add') {
     need(owner || user.role === 'family');
+    if (hid(o.parent)) throw new Error('The father of this entry is no longer in the tree.');
     if (!ID.test(String(o.id || ''))) throw new Error('bad id');
     if (P[o.id]) return { res: { ok: true, id: o.id, name: P[o.id].name } };   // already received
     if (!P[o.parent]) throw new Error('The father of this entry is no longer in the tree.');
@@ -158,9 +160,10 @@ function applyOne(user, o, urdu) {
   if (o.op === 'suggest') {
     if (!ID.test(String(o.sid || ''))) throw new Error('bad id');
     if (tree.suggestions.some(s => s.sid === o.sid)) return {};
-    const text = clip(o.text, 600); if (!text) throw new Error('The suggestion was empty.');
+    const text = clip(o.text, 600); if (!text && !o.father) throw new Error('The suggestion was empty.');
     const kind = { name: 'Wrong spelling', father: 'Wrong father', other: 'Other' }[o.kind] || 'Other';
-    tree.suggestions.push({ sid: o.sid, person: String(o.person || ''), person_name: nameOf(o.person), kind, text, by: user.name, at: new Date().toISOString(), done: false });
+    const fid = P[o.father] && !hid(o.father) ? o.father : '';
+    tree.suggestions.push({ sid: o.sid, person: String(o.person || ''), person_name: nameOf(o.person), kind, text, father: fid, father_name: fid ? nameOf(fid) : '', by: user.name, at: new Date().toISOString(), done: false });
     history(user.name, 'suggestion: ' + kind, o.person, nameOf(o.person), text);
     log(user.name, 'sent a suggestion about', nameOf(o.person));
     return { changed: true };
@@ -175,6 +178,7 @@ function applyOne(user, o, urdu) {
     if ('g' in f) { x.g = f.g === 'f' ? 'f' : 'm'; history('owner', 'changed son/daughter', o.id, '', x.g === 'f' ? 'daughter' : 'son'); }
     if ('star' in f) x.star = ['p', 'k'].indexOf(f.star) >= 0 ? f.star : '';
     if ('spouse' in f) x.spouse = P[f.spouse] ? f.spouse : '';
+    if ('vis' in f) { if (f.vis === 'show') { x.show = 1; delete x.hide; } else { x.hide = 1; delete x.show; } history('owner', f.vis === 'show' ? 'shown to family' : 'hidden from family', o.id, '', x.name); }
     return { changed: true };
   }
   if (o.op === 'approve') {
@@ -199,11 +203,18 @@ function applyOne(user, o, urdu) {
   throw new Error('Unknown change.');
 }
 
+// ---- women of the family are hidden from everyone but the owner (he can show any of them); prophets and
+// important people are never hidden. A hidden person's descendants are hidden with her.
+const hiddenOf = x => x.show !== 1 && (x.hide === 1 || (x.g === 'f' && !x.star));
+function hiddenSet() { const H = new Set(), P = tree.people;
+  const under = id => { let c = id, g = 0; while (c && P[c] && g++ < 600) { if (hiddenOf(P[c])) return true; c = P[c].parent; } return false; };
+  for (const k in P) if (under(k)) H.add(k); return H; }
 // ---- what a phone gets: the tree (and, for the owner, the suggestions)
 function treeFor(user) {
-  const people = {};
-  for (const k in tree.people) { const x = tree.people[k]; people[k] = { name: x.name, parent: x.parent, order: x.order, g: x.g || '', note: x.note || '', star: x.star || '', spouse: x.spouse || '', guess: x.guess || '',
-    pend: x.status === 'pending' ? 1 : 0, by: x.status === 'pending' ? x.added_by : '', mine: x.status === 'pending' && x.added_code === idOf(user.code) ? 1 : 0 }; }
+  const people = {}, H = hiddenSet();
+  for (const k in tree.people) { const x = tree.people[k];
+    if (!user.owner && H.has(k) && !(x.status === 'pending' && x.added_code === idOf(user.code))) continue; people[k] = { name: x.name, parent: x.parent, order: x.order, g: x.g || '', note: x.note || '', star: x.star || '', spouse: x.spouse || '', guess: x.guess || '',
+    pend: x.status === 'pending' ? 1 : 0, by: x.status === 'pending' ? x.added_by : '', mine: x.status === 'pending' && x.added_code === idOf(user.code) ? 1 : 0 }; if (user.owner && H.has(k)) people[k].hid = hiddenOf(x) ? 1 : 2; }
   const o = { ok: true, ver: tree.ver, people, start: tree.start || 'p0084', me: { name: user.name, role: user.role, owner: !!user.owner } };
   if (user.owner) o.suggestions = tree.suggestions.filter(s => !s.done);
   return o;
@@ -213,6 +224,7 @@ function treeFor(user) {
 const send = (res, code, obj) => { res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
 const body = req => new Promise((resolve, reject) => { const ch = []; let n = 0; req.on('data', d => { n += d.length; if (n > 512e3) { reject(new Error('big')); req.destroy(); } else ch.push(d); }); req.on('end', () => { try { resolve(JSON.parse(Buffer.concat(ch).toString('utf8') || '{}')); } catch (e) { resolve({}); } }); req.on('error', reject); });
 const pinFails = new Map();
+const LINK_DAYS = 3;
 const pinHash = pin => crypto.createHash('sha256').update(cfg.ownerCode + ':' + pin).digest('hex');
 const link = code => APP_URL + '?t=' + cfg.topic + '&c=' + code + (publicUrl ? '&s=' + publicUrl.replace('https://', '') : '');
 const isLocal = req => !req.headers['cf-connecting-ip'] && !req.headers['x-forwarded-for'] && ['127.0.0.1', '::1', '::ffff:127.0.0.1'].indexOf(req.socket.remoteAddress) >= 0;
@@ -239,6 +251,8 @@ async function handle(req, res) {
   const dk = idOf(user.code), dev = String(req.headers['x-dev'] || '');
   if (user.owner && cfg.devs[dk] && fs.existsSync(path.join(ROOT, 'RESET-DEVICE.txt'))) { delete cfg.devs[dk]; saveCfg(); try { fs.unlinkSync(path.join(ROOT, 'RESET-DEVICE.txt')); } catch (e) {} log('Owner phone lock released with RESET-DEVICE.txt'); }
   if (!/^[a-f0-9]{24,64}$/.test(dev)) return send(res, 401, { error: 'device' });
+  const LP = !user.owner && cfg.people.find(x => x.code === user.code);
+  if (!cfg.devs[dk] && LP && Date.now() - Date.parse(LP.linkAt || LP.added || 0) > LINK_DAYS * 864e5) return send(res, 401, { error: 'expired' });
   if (!cfg.devs[dk]) { cfg.devs[dk] = { id: dev, at: new Date().toISOString() }; saveCfg(); log(user.name, 'opened the link: it is now tied to this phone.'); history(user.name, 'opened personal link', '', '', ''); }
   else if (cfg.devs[dk].id !== dev) { log('REFUSED: another phone tried to use the link of', user.name); return send(res, 401, { error: 'device' }); }
   cfg.devs[dk].seen = new Date().toISOString();
@@ -268,11 +282,11 @@ async function handle(req, res) {
   }
   if (!user.owner) return send(res, 403, { error: 'owner' });
   if (p[1] === 'people' && req.method === 'GET') {
-    return send(res, 200, { ok: true, people: cfg.people.map(x => ({ code: x.code, name: x.name, role: x.role, cancelled: !!x.cancelled, opened: !!cfg.devs[idOf(x.code)], seen: (cfg.devs[idOf(x.code)] || {}).seen || '', link: link(x.code) })) });
+    return send(res, 200, { ok: true, people: cfg.people.map(x => ({ code: x.code, name: x.name, role: x.role, cancelled: !!x.cancelled, opened: !!cfg.devs[idOf(x.code)], expired: !cfg.devs[idOf(x.code)] && Date.now() - Date.parse(x.linkAt || x.added || 0) > LINK_DAYS * 864e5, seen: (cfg.devs[idOf(x.code)] || {}).seen || '', link: link(x.code) })) });
   }
   if (p[1] === 'people' && !p[2] && req.method === 'POST') {
     const b = await body(req), name = clip(b.name, 40); if (!name) return send(res, 400, { error: 'name' });
-    const x = { name, code: rnd(16), role: b.role === 'viewer' ? 'viewer' : 'family', added: new Date().toISOString() };
+    const x = { name, code: rnd(16), role: b.role === 'viewer' ? 'viewer' : 'family', added: new Date().toISOString(), linkAt: new Date().toISOString() };
     cfg.people.push(x); saveCfg(); writeLinks(); history('owner', 'made a personal link', '', '', name + ' (' + x.role + ')'); log('Personal link made for', name);
     return send(res, 200, { ok: true, link: link(x.code), code: x.code });
   }
@@ -283,7 +297,7 @@ async function handle(req, res) {
     else if (p[3] === 'restore') { delete x.cancelled; history('owner', 'restored access', '', '', x.name); }
     else if (p[3] === 'role') x.role = b.role === 'viewer' ? 'viewer' : 'family';
     else if (p[3] === 'renew') {   // new phone: a fresh link; the old link and old phone stop working
-      delete cfg.devs[idOf(x.code)]; x.code = rnd(16); delete x.cancelled; history('owner', 'new link (new phone)', '', '', x.name);
+      delete cfg.devs[idOf(x.code)]; x.code = rnd(16); x.linkAt = new Date().toISOString(); delete x.cancelled; history('owner', 'new link (new phone)', '', '', x.name);
     } else return send(res, 400, { error: 'what' });
     saveCfg(); writeLinks(); return send(res, 200, { ok: true, link: link(x.code) });
   }
@@ -315,8 +329,8 @@ setInterval(selfUpdate, 10 * 60e3); setTimeout(selfUpdate, 60e3);
 let publicUrl = '', tunnelProc = null;
 function writeLinks() {
   const L = ['SHAJRAH links. Keep this file private.', '', 'YOUR OWNER LINK (open it on your own phone only):', link(cfg.ownerCode), '',
-    'If you change your phone: put an empty file named RESET-DEVICE.txt in this folder, then open your link on the new phone.',
-    'If you forget your PIN: put an empty file named RESET-PIN.txt in this folder, then open the app and choose a new PIN.', '', 'Family links:'];
+    'If you change your phone: put an empty file named RESET-DEVICE.txt in the Shajarah-Server folder (in your home folder), then open your link on the new phone.',
+    'If you forget your PIN: put an empty file named RESET-PIN.txt in the Shajarah-Server folder, then open the app and choose a new PIN.', '', 'Family links (each opens on one phone only, and stops working if not opened within 3 days):'];
   cfg.people.forEach(x => L.push(x.name + (x.cancelled ? ' (cancelled)' : x.role === 'viewer' ? ' (view only)' : '') + ': ' + link(x.code)));
   fs.writeFileSync(path.join(ROOT, 'LINKS.txt'), L.join('\n') + '\n');
 }

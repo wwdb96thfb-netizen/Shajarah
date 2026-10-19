@@ -7,7 +7,7 @@
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto'), os = require('os');
 const { spawn } = require('child_process');
 
-const VERSION = 5;
+const VERSION = 6;
 const ROOT = __dirname, DATA = path.join(ROOT, 'data'), BACK = path.join(DATA, 'backups');
 const CFG = path.join(DATA, 'config.json'), TREE = path.join(DATA, 'tree.json'), HIST = path.join(DATA, 'history.jsonl');
 const APP_URL = process.env.SJ_APP_URL || 'https://wwdb96thfb-netizen.github.io/Shajarah/';
@@ -49,6 +49,19 @@ function dailyBackup() {
   try { if (fs.existsSync(TREE)) fs.copyFileSync(TREE, f); else writeJSON(f, tree); } catch (e) {}
   try { const L = fs.readdirSync(BACK).filter(x => /^tree-[\d-]+\.json$/.test(x)).sort(); while (L.length > 120) fs.unlinkSync(path.join(BACK, L.shift())); } catch (e) {}
 }
+// a second copy goes to iCloud Drive (when this Mac uses it), so the Shajarah survives if this Mac is lost
+const ICLOUD = path.join(require('os').homedir(), 'Library', 'Mobile Documents', 'com~apple~CloudDocs');
+let icloudVer = -1, icloudWarned = false;
+function icloudBackup() {
+  if (icloudVer === tree.ver || process.env.SJ_NO_ICLOUD) return;
+  if (!fs.existsSync(ICLOUD)) { if (!icloudWarned) { icloudWarned = true; log('iCloud Drive is not on for this Mac: the extra backup copy was not made. (Backups stay in the data/backups folder.)'); } return; }
+  try { const dir = path.join(ICLOUD, 'Shajarah Backups'); fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'shajarah-' + dayOf() + '.json'), JSON.stringify(tree));
+    const L = fs.readdirSync(dir).filter(x => /^shajarah-[\d-]+\.json$/.test(x)).sort(); while (L.length > 90) fs.unlinkSync(path.join(dir, L.shift()));
+    const first = icloudVer < 0; icloudVer = tree.ver; if (first) log('Backup copy saved to iCloud Drive (folder "Shajarah Backups").');
+  } catch (e) { if (!icloudWarned) { icloudWarned = true; log('Could not save the backup copy to iCloud Drive: ' + e.message + '. If the Mac asks to allow access to iCloud Drive, press Allow.'); } }
+}
+setTimeout(icloudBackup, 20e3); setInterval(icloudBackup, 60 * 60e3);
 const saveTree = () => { tree.ver = (tree.ver || 0) + 1; writeJSON(TREE, tree); };
 saveTree();
 const history = (who, action, id, before, after) => {
@@ -229,6 +242,8 @@ function applyOne(user, o, urdu) {
     if ('wives' in f) { x.wives = (Array.isArray(f.wives) ? f.wives : []).slice(0, 6).map(w => ({ name: clip(w && w.name, 80), show: w && w.show ? 1 : 0 })).filter(w => w.name); history('owner', 'wives recorded', o.id, '', x.wives.map(w => w.name).join('، ')); }
     // a child's mother: a wife in the tree (her id) or a wife kept by name ("w:" + name)
     if ('mother' in f) { const m = String(f.mother || ''); x.mother = (P[m] || /^w:.{1,80}$/.test(m)) ? m : ''; }
+    // optional details: birth year, death year, place (village or city)
+    for (const k of ['born', 'died', 'place']) if (k in f) { const v = clip(f[k], k === 'place' ? 60 : 20); if (v) x[k] = v; else delete x[k]; }
     if ('vis' in f) { if (f.vis === 'show') { x.show = 1; delete x.hide; } else { x.hide = 1; delete x.show; } history('owner', f.vis === 'show' ? 'shown to family' : 'hidden from family', o.id, '', x.name); }
     return { changed: true };
   }
@@ -266,7 +281,7 @@ function treeFor(user) {
   for (const k in tree.people) { const x = tree.people[k];
     if (!user.owner && H.has(k) && !(x.status === 'pending' && x.added_code === idOf(user.code))) continue;
     const wv = (x.wives || []).filter(w => user.owner || w.show), mo = String(x.mother || ''), moOk = !mo ? '' : mo.startsWith('w:') ? (user.owner || (tree.people[x.parent] && (tree.people[x.parent].wives || []).some(w => w.show && 'w:' + w.name === mo)) ? mo : '') : (user.owner || !H.has(mo) ? mo : '');
-    people[k] = { wives: wv.map(w => user.owner ? w : { name: w.name }), mother: moOk, name: x.name, parent: x.parent, order: x.order, g: x.g || '', note: x.note || '', star: x.star || '', spouse: x.spouse || '', guess: x.guess || '',
+    people[k] = { wives: wv.map(w => user.owner ? w : { name: w.name }), mother: moOk, name: x.name, parent: x.parent, order: x.order, g: x.g || '', note: x.note || '', star: x.star || '', spouse: x.spouse || '', guess: x.guess || '', born: x.born || '', died: x.died || '', place: x.place || '',
     pend: x.status === 'pending' ? 1 : 0, by: x.status === 'pending' ? x.added_by : '', mine: x.status === 'pending' && x.added_code === idOf(user.code) ? 1 : 0 }; if (user.owner && H.has(k)) people[k].hid = hiddenOf(x) ? 1 : 2; }
   const o = { ok: true, ver: tree.ver, people, start: tree.start || 'p0084', me: { name: user.name, role: user.role, owner: !!user.owner, pid: user.pid || '' } };
   if (user.owner) o.suggestions = tree.suggestions.filter(s => !s.done);
@@ -375,6 +390,11 @@ async function handle(req, res) {
       delete cfg.devs[idOf(x.code)]; x.code = rnd(16); x.linkAt = new Date().toISOString(); delete x.cancelled; history('owner', 'new link (new phone)', '', '', x.name);
     } else return send(res, 400, { error: 'what' });
     saveCfg(); writeLinks(); return send(res, 200, { ok: true, link: link(x.code) });
+  }
+  if (p[1] === 'backup' && req.method === 'GET') {   // the owner can save a full copy on his phone
+    let hist = ''; try { hist = fs.readFileSync(HIST, 'utf8').split('\n').slice(-2000).join('\n'); } catch (e) {}
+    history('owner', 'saved a backup copy on his phone', '', '', '');
+    return send(res, 200, { ok: true, kind: 'shajarah-backup', at: new Date().toISOString(), tree, history: hist });
   }
   if (p[1] === 'history' && req.method === 'GET') {
     let L = []; try { L = fs.readFileSync(HIST, 'utf8').trim().split('\n').slice(-300).reverse().map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean); } catch (e) {}

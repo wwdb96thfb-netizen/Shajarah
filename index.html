@@ -127,7 +127,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .lock{max-width:420px;line-height:1.6;color:var(--fg)}
 body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 input,textarea{-webkit-user-select:text;user-select:text}
-@media print{body *{display:none!important}body::after{content:"Printing the Shajrah is not allowed.";display:block;padding:40px;font:20px sans-serif}}
+@media print{body:not(.printing) *{display:none!important}body:not(.printing)::after{content:"Printing the Shajrah is not allowed.";display:block;padding:40px;font:20px sans-serif}}
 .byname{font:inherit;padding:6px 10px;border-radius:8px;border:1px solid var(--rule);background:var(--bg);color:var(--fg)}
 
 .app[hidden]{display:none!important}
@@ -153,6 +153,9 @@ input,textarea,select{font-size:16px!important}
 .edge.me{stroke:var(--pro);stroke-width:3.4}
 .node.me rect{stroke:var(--pro);stroke-width:3}
 .wf{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 0}.wf .ur{font-family:var(--ur);font-size:1.05rem;color:var(--fg)}
+.dets .row input,.dets>input{flex:1 1 120px;min-width:0;padding:8px 10px;border-radius:8px;border:1px solid var(--rule);background:var(--bg);color:var(--fg);font-size:16px}
+#printArea{display:none}
+@media print{body.printing>*:not(#printArea){display:none!important}body.printing #printArea{display:block}body.printing #printArea svg{width:100%;height:auto;max-height:none;display:block;aspect-ratio:var(--ar)}body.printing{background:#fff!important}}
 .golink{color:var(--gold,#b8860b);text-decoration:underline;cursor:pointer;font-weight:600}
 .wf button,#motherRow button{padding:4px 10px!important;font-size:.85rem}
 .node.wife rect{fill:var(--card);stroke:var(--pro);stroke-width:1.4}
@@ -254,7 +257,7 @@ body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
 }
 @media print{body.ro *{display:none!important}body.ro::after{content:"Printing the Shajarah is not allowed.";display:block;padding:40px;font:20px sans-serif}}
 </style>
-</head><body class="ro">
+</head><body class="ro"><div id="printArea"></div>
 
 <div class="screen" id="scrSetup" hidden><div class="card">
   <img class="logo" src="icon-192.png" alt="">
@@ -309,6 +312,8 @@ body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
       <button type="button" id="sugList" hidden>Suggestions</button>
       <button type="button" id="usersBtn" hidden>People &amp; links</button>
       <button type="button" id="histBtn" hidden>History</button>
+      <button type="button" id="printBtn" hidden>🖨 Print / save as PDF</button>
+      <button type="button" id="backupBtn" hidden>💾 Save a backup copy</button>
       <button type="button" id="pushBtn" hidden>🔔 Turn on notifications</button>
       <button type="button" id="updBtn">⟳ Update app</button>
       <div class="about"><img src="icon-192.png" alt=""><div><b>شجرۃ الطیبہ</b><span id="verTxt"></span><span class="cr">© 2026 Syed Iftikhar Shah · Private family record</span></div></div>
@@ -368,6 +373,10 @@ body.ro input,body.ro textarea{-webkit-user-select:text;user-select:text}
         <div id="secMore" style="display:flex;flex-direction:column;gap:12px"><h2>More</h2>
           <div class="row"><span class="meta" style="align-self:center">Highlight:</span><button type="button" id="hlN">None</button><button type="button" id="hlK">Important</button><button type="button" id="hlP">Prophet</button></div>
           <div class="row"><span class="meta" style="align-self:center">This person is a:</span><button type="button" id="gM">Son</button><button type="button" id="gF">Daughter</button></div>
+          <section class="box dets"><h3>Details <small class="meta">(optional)</small></h3>
+            <div class="row"><input id="dBorn" type="text" inputmode="numeric" placeholder="Born (year)" aria-label="Born"><input id="dDied" type="text" inputmode="numeric" placeholder="Died (year)" aria-label="Died"></div>
+            <input id="dPlace" type="text" dir="auto" placeholder="Village / city" aria-label="Place">
+            <button type="button" id="dSave">Save details</button></section>
           <section class="box" id="coupleBox">
             <h3 id="coupleTitle">Wife</h3>
             <div id="coupleList" class="meta"></div>
@@ -489,7 +498,7 @@ function lockProphet(){requestAnimationFrame(()=>requestAnimationFrame(()=>{if(c
 let awayAt=0;document.addEventListener('visibilitychange',()=>{if(document.hidden)awayAt=Date.now();else if(awayAt&&Date.now()-awayAt>60e3&&!$('#app').hidden)lockProphet()});
 function setData(j){DATA={ver:j.ver,people:j.people,start:j.start,me:j.me,suggestions:j.suggestions||[]};keep('tree',DATA);setMe(j.me)}
 function setMe(me){ME=me;$('#goMe').hidden=$('#myPath').hidden=!(me&&me.pid);canWrite=!!(me&&me.owner);canAdd=canWrite||(me&&me.role==='family');document.body.classList.toggle('ro',!canWrite);
-  ['pendList','sugList','usersBtn','histBtn'].forEach(b=>$('#'+b).hidden=!canWrite);drawPush();$('#pEmptyAdd').hidden=!canAdd;watermark()}
+  ['pendList','sugList','usersBtn','histBtn','printBtn','backupBtn'].forEach(b=>$('#'+b).hidden=!canWrite);drawPush();$('#pEmptyAdd').hidden=!canAdd;watermark()}
 async function sync(){if(syncing||!cfg.c||(ME&&ME.owner&&!PIN))return;syncing=true;pill();
   try{if(OUT.length){const batch=OUT.slice(0,100),j=await api('/api/sync',{method:'POST',body:JSON.stringify({ops:batch})});
       const bad=[];(j.results||[]).forEach((r,i)=>{if(r&&r.error)bad.push(r.error)});
@@ -531,6 +540,8 @@ $('#pinGo').onclick=async()=>{const a=$('#pin1').value.trim(),b=$('#pin2').value
     E.textContent='Saving…';try{await api('/api/pin',{method:'POST',body:JSON.stringify({pin:a})});PIN=a;keep('pinv',await sha(cfg.c+':'+a));screen(null);sync()}catch(e){if(!e.stop)E.textContent='No connection to the server. Try again when online.'}return}
   // offline the PIN is checked against the copy kept on this phone; online the server checks it
   const v=await sha(cfg.c+':'+a),kept=load('pinv');
+  // right PIN as kept on this phone: open at once with the saved tree, and check with the server in the background
+  if(kept&&kept===v&&DATA){PIN=a;showApp();(async()=>{try{const j=await api('/api/tree?v='+(DATA&&DATA.ver||''));if(!j.same)setData(j);else setMe(j.me);await sync();openFromNote();if(Notification&&Notification.permission==='granted'&&!load('push'))enablePush(false)}catch(e){}})();return}
   if(!navigator.onLine||!(await findServer())){if(kept&&kept===v){PIN=a;showApp();return}E.textContent=kept?'Wrong PIN.':'No connection to the server.';return}
   PIN=a;E.textContent='Checking…';try{const j=await api('/api/tree?v='+(DATA&&DATA.ver||''));keep('pinv',v);if(!j.same)setData(j);else setMe(j.me);showApp();await sync();openFromNote();if(Notification&&Notification.permission==='granted'&&!load('push'))enablePush(false)}catch(e){}};
 ['pin1','pin2'].forEach(i=>$('#'+i).addEventListener('keydown',e=>{if(e.key==='Enter')$('#pinGo').click()}));
@@ -550,7 +561,7 @@ $('#copyLink').onclick=async()=>{const L=location.origin+location.pathname+'?t='
 $('#noInstall').onclick=()=>{keep('noinst',1);start()};
 
 // ---- version and manual update
-const APP_VER=18, BUILD_DATE='19 Oct 2026';
+const APP_VER=19, BUILD_DATE='19 Oct 2026';
 $('#verTxt').textContent='Shajarah · Version 1.'+APP_VER+' · '+BUILD_DATE;
 $('#updBtn').onclick=async()=>{toast('Updating…');try{const r=await navigator.serviceWorker.getRegistration();if(r)await r.update()}catch(e){}
   try{const ks=await caches.keys();await Promise.all(ks.filter(k=>k.indexOf('sj-')===0).map(k=>caches.delete(k)))}catch(e){}
@@ -740,7 +751,9 @@ const goLink=(k,n)=>`<a class="golink ur" data-goto="${esc(k)}">${esc(n)} ↗</a
 function relFull(id){let t=relText(id);const m=motherOf(id),mi=motherId(id),p=P[id];
   if(m)t=t.replace('</span><br>','</span> and '+(mi?goLink(mi,m):'<span class="ur">'+esc(m)+'</span>')+'<br>');
   const w=wivesOf(id);if(w.length&&p.g!=='f')t+='<br>'+(w.length>1?'Wives':'Wife')+': '+w.map(x=>x.tree?goLink(x.key,x.name):'<span class="ur">'+esc(x.name)+'</span>').join('، ');
-  if(p.g==='f'&&p.spouse&&P[p.spouse])t+='<br>Husband: '+goLink(p.spouse,label(P[p.spouse]));return t}
+  if(p.g==='f'&&p.spouse&&P[p.spouse])t+='<br>Husband: '+goLink(p.spouse,label(P[p.spouse]));
+  const d=detLine(p);if(d)t+='<br>'+d;return t}
+function detLine(p){const a=[];if(p.born)a.push('Born '+esc(p.born));if(p.died)a.push('Died '+esc(p.died));if(p.place)a.push('<span class="ur">'+esc(p.place)+'</span>');return a.join(' · ')}
 $('#rel').addEventListener('click',e=>{const a=e.target.closest('[data-goto]');if(!a)return;const id=a.dataset.goto;if(!P[id])return;if(!pos[id]){viewMode='all';viewRoot=null;setModeButtons();draw()}select(id);centerOn(id,Math.max(T.k,0.8))});
 function drawCouple(id){const p=P[id],fem=p.g==='f';$('#coupleTitle').textContent=fem?'Husband':'Wife / wives';$('#wifeTypeRow').hidden=fem;
   $('#pickSpouse').textContent=fem?'Pick her husband from the tree':'Pick his wife from the tree';
@@ -771,7 +784,7 @@ function select(id){sel=id;delArm=false;$('#delBtn').textContent='Delete';msg(''
     const g=$('#guess');if(p.guess&&!label(p)){g.hidden=false;g.innerHTML=`Earlier reading (not certain): <span class="ur">${esc(p.guess)}</span>`}else g.hidden=true;
     const hasKids=kids(id).length>0,pend=!!p.pend,own=!canWrite&&pend&&!!p.mine;
     $('#gM').classList.toggle('on',p.g!=='f');$('#gF').classList.toggle('on',p.g==='f');['N','K','P'].forEach(c=>$('#hl'+c).classList.toggle('on',(p.star||'')===({N:'',K:'k',P:'p'})[c]));
-    $('#chFather').disabled=!p.parent;
+    $('#chFather').disabled=!p.parent;$('#dBorn').value=p.born||'';$('#dDied').value=p.died||'';$('#dPlace').value=p.place||'';
     $('#secAdd').hidden=!canAdd;$('#famAddNote').hidden=canWrite;$('#sugText').value='';$('#suggestMsg').textContent='';
     $('#secFix').hidden=!(canWrite||own);$('#noteLbl').hidden=!canWrite;$('#secFix h3').innerHTML=own?'<span class="u">اپنا درج کیا ہوا نام درست کریں</span><small class="en">Correct the name you added</small>':pend?'Change the name before approving':'Correct this name';$('#saveBtn').innerHTML=own?'<span class="u">محفوظ کریں</span><small class="en">Save</small>':'Save';
     $('#secSug').hidden=canWrite||own;$('#secMore').hidden=!canWrite||pend;
@@ -862,16 +875,19 @@ function findNames(q){const ur=/[\u0600-\u06FF]/.test(q);
   return R.sort((a,b)=>a[0]-b[0]||a[1]-b[1]).map(r=>r[2])}
 // tie-break: compare with vowels too, so "ali" puts علی before لؤی
 const VMAP={'ا':'a','آ':'a','ع':'a','أ':'a','ء':'','ئ':'i','ی':'i','ي':'i','ے':'e','و':'u','ؤ':'u'};
-function fullU(t){let o='';for(const ch of t)o+=UMAP[ch]||VMAP[ch]||(/\s/.test(ch)?' ':'');return dedup(o.replace(/ +/g,' ').trim())}
-function fullR(t){return dedup((t||'').toLowerCase().replace(/[^a-z ]/g,'').replace(/kh/g,'x').replace(/sh/g,'S').replace(/ch/g,'c').replace(/gh/g,'G').replace(/th/g,'t').replace(/dh/g,'d').replace(/ph/g,'f').replace(/q/g,'k').replace(/[ey]/g,'i').replace(/[ow]/g,'u').replace(/v/g,'u').replace(/ +/g,' ').trim())}
-function lev(a,b){const m=a.length,n=b.length;let p=Array.from({length:n+1},(_,j)=>j);for(let i=1;i<=m;i++){const c=[i];for(let j=1;j<=n;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=c}return p[n]}
-function closeness(q,n){const q2=q.toLowerCase().replace(/\b(syed|sayed|sayyed|syeda|sayeda|shah|hazrat|hazret|imam)\b/g,' ').trim()||q;const qw=fullR(q2).split(' '),nw=fullU(n).split(' '),L=qw.length;let best=99;
-  for(let i=0;i+L<=Math.max(nw.length,L);i++)best=Math.min(best,lev(qw.join(' '),nw.slice(i,i+L).join(' ')));return best*10+nw.length}
+function fullU(t){let o='';for(const ch of t)o+=UMAP[ch]||VMAP[ch]||(/\s/.test(ch)?' ':'');return dedup(o.replace(/ +/g,' ').trim()).replace(/(.)h(?= |$)/g,'$1')}
+function fullR(t){return dedup((t||'').toLowerCase().replace(/[^a-z ]/g,'').replace(/kh/g,'x').replace(/sh/g,'S').replace(/ch/g,'c').replace(/gh/g,'G').replace(/th/g,'t').replace(/dh/g,'d').replace(/ph/g,'f').replace(/q/g,'k').replace(/[ey]/g,'i').replace(/[ow]/g,'u').replace(/v/g,'u').replace(/ +/g,' ').trim()).replace(/(.)h(?= |$)/g,'$1')}
+function lev(a,b){const V='aiu',dc=ch=>V.includes(ch)?0.3:1,m=a.length,n=b.length;let p=[0];for(let j=1;j<=n;j++)p[j]=p[j-1]+1;for(let i=1;i<=m;i++){const c=[p[0]+dc(a[i-1])];for(let j=1;j<=n;j++)c[j]=Math.min(p[j]+dc(a[i-1]),c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=c}return p[n]}
+let TTL=null;
+function closeness(q,n){TTL=TTL||new Set(['سید','سیدہ','السید','حضرت','امام','شاہ','سیّد'].map(fullU));
+  const q2=q.toLowerCase().replace(/\b(syed|sayed|sayyed|syeda|sayeda|shah|hazrat|hazret|imam)\b/g,' ').trim()||q;const qw=fullR(q2).split(' '),L=qw.length;
+  let nw=fullU(n).split(' ');const core=nw.filter(w=>!TTL.has(w));if(core.length>=L)nw=core;let best=99,at=0;
+  for(let i=0;i+L<=Math.max(nw.length,L);i++){const d=lev(qw.join(' '),nw.slice(i,i+L).join(' '));if(d<best){best=d;at=i}}return best*10+at*3+nw.length}
 // search
 $('#q').addEventListener('input',()=>{const q=$('#q').value.trim();const box=$('#res');
   if(!q){box.hidden=true;return}
   const hits=findNames(q).slice(0,25);
-  box.innerHTML=hits.length?hits.map(k=>{const f=P[P[k].parent];return `<button type="button" data-id="${k}">${esc(label(P[k])||P[k].guess+' ؟')}<small>${P[k].g==='f'?'daughter':'son'} of ${esc(f?label(f)||'—':'—')}</small></button>`}).join(''):'<div class="meta" style="padding:8px 12px">No match</div>';
+  box.innerHTML=hits.length?hits.map(k=>{const f=P[P[k].parent];return `<button type="button" data-id="${k}">${esc(label(P[k])||P[k].guess+' ؟')}<small>${P[k].g==='f'?'daughter':'son'} of ${esc(f?label(f)||'—':'—')}${P[k].place||P[k].born?' · '+esc([P[k].place,P[k].born].filter(Boolean).join(' · ')):''}</small></button>`}).join(''):'<div class="meta" style="padding:8px 12px">No match</div>';
   box.hidden=false});
 $('#res').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const id=b.dataset.id;$('#res').hidden=true;$('#q').value='';$('#searchBox').hidden=true;$('#q').blur();
   if(!pos[id]){viewMode='all';viewRoot=null;setModeButtons();draw()}select(id);centerOn(id,Math.max(T.k,0.8))});
@@ -900,6 +916,26 @@ $('#sugBody').addEventListener('click',e=>{const fm=e.target.closest('[data-fixm
   const fx2=e.target.closest('[data-fix]');if(fx2){const c=fx2.dataset.p,f=fx2.dataset.f;if(f===c||ancestors(f).has(c)){toast('That would make him his own ancestor.',true);return}
     OUT.push({op:'set',id:c,f:{parent:f}});OUT.push({op:'resolve',sid:fx2.dataset.fix});keep('out',OUT);rebuild();sync();showSugs();toast('Father changed')}
   if(a){if(approveOne(a.dataset.appr)){rebuild();sync();showPend()}else{$('#sugBody').insertAdjacentHTML('afterbegin','<div class="msg err">Approve his father first.</div>')}}});
+$('#dSave').onclick=()=>{if(!sel)return;setF({born:$('#dBorn').value.trim(),died:$('#dDied').value.trim(),place:$('#dPlace').value.trim()},'Details saved')};
+// owner: print the full tree (the phone's print screen can save it as a PDF). Family phones cannot print.
+function printTree(forFamily){const src=$('#tree'),w=$('#world');if(!canWrite||!w)return;
+  const bb=w.getBBox(),pad=30,svg=src.cloneNode(true);svg.removeAttribute('id');svg.removeAttribute('style');
+  const g=svg.querySelector('#world');g.removeAttribute('transform');g.removeAttribute('id');
+  svg.setAttribute('viewBox',[bb.x-pad,bb.y-pad,bb.width+2*pad,bb.height+2*pad].join(' '));svg.setAttribute('preserveAspectRatio','xMidYMin meet');
+  svg.querySelectorAll('.sel').forEach(n=>n.classList.remove('sel'));svg.querySelectorAll('.me').forEach(n=>n.classList.remove('me'));
+  if(forFamily)svg.querySelectorAll('.node.hid').forEach(n=>{n.querySelectorAll('text').forEach(t=>t.textContent='')});
+  const land=bb.width>bb.height,pw=land?Math.min(2000,Math.max(594,Math.round(bb.width/12))):420,ph=land?Math.round(pw*(bb.height+2*pad)/(bb.width+2*pad))+30:594,area=$('#printArea');
+  area.innerHTML=`<style>@page{size:${pw}mm ${ph}mm;margin:10mm}</style><div style="font:600 14px sans-serif;text-align:center;margin:0 0 6px;color:#444">شجرۃ الطیبہ · ${new Date().toISOString().slice(0,10)}</div>`;svg.style.setProperty('--ar',(bb.width+2*pad)+' / '+(bb.height+2*pad));area.append(svg);
+  document.body.classList.add('printing');const done=()=>{document.body.classList.remove('printing');area.innerHTML='';window.removeEventListener('afterprint',done)};
+  window.addEventListener('afterprint',done);setTimeout(()=>{window.print();setTimeout(()=>document.addEventListener('pointerdown',done,{once:true}),3000)},300)}
+$('#printBtn').onclick=()=>{menuOpen(false);modal('Print / save as PDF',`<p>The whole Shajarah is put on one large page. On the print screen choose <b>Save as PDF</b> (Android) or press <b>Share → Save to Files</b> (iPhone). The PDF stays sharp when you zoom in.</p>
+  <div class="row"><button type="button" class="primary" data-print="full">All names</button><button type="button" data-print="fam">For family — hidden names left blank</button><button type="button" data-close="1">Cancel</button></div>`)};
+$('#sugBody').addEventListener('click',e=>{const b=e.target.closest('[data-print]');if(!b)return;$('#sugM').hidden=true;printTree(b.dataset.print==='fam')});
+// owner: save a full copy of the Shajarah on this phone (or send it to Google Drive / iCloud / email from the share screen)
+$('#backupBtn').onclick=async()=>{menuOpen(false);toast('Preparing the backup…');let j;try{j=await api('/api/backup')}catch(e){if(!e.stop)toast(e.net?'Needs internet (the Mac must be on).':'Backup failed.',true);return}
+  const name='shajarah-backup-'+new Date().toISOString().slice(0,10)+'.json',blob=new Blob([JSON.stringify(j)],{type:'application/json'});
+  try{const file=new File([blob],name,{type:'application/json'});if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:'Shajarah backup'});return}}catch(e){if(e&&e.name==='AbortError')return}
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.append(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000);toast('Backup saved: '+name)};
 $('#histBtn').onclick=async()=>{modal('History of changes','Loading…');try{const j=await api('/api/history');
     $('#sugBody').innerHTML=j.history.length?j.history.map(h=>`<div class="hist">${esc(new Date(h.at).toLocaleString('en-GB'))} — <b>${esc(h.who)}</b> ${esc(h.action)}${h.before?`: <span class="ur">${esc(h.before)}</span> →`:''} <span class="ur">${esc(h.after)}</span></div>`).join(''):'Nothing yet.'}
   catch(e){$('#sugBody').textContent=e.net?'Needs internet.':'Could not load.'}};
@@ -919,6 +955,7 @@ $('#usersBtn').onclick=showUsers;
 const startWho=(w)=>{whoPick=w;$('#usrM').hidden=true;select(null);cvEl.classList.add('picking');$('#bannerTxt').textContent='Tap who '+(w.name||'he')+' is in the Shajarah';$('#banner').hidden=false};
 $('#uWho').onclick=()=>startWho({name:$('#uName').value.trim()});$('#usrX').onclick=()=>{$('#usrM').hidden=true};
 $('#uGo').onclick=async()=>{const n=$('#uName').value.trim();if(!n){$('#uNew').textContent='Type the person’s name first.';return}
+  if(!newPid){$('#uNew').textContent='First tap “Who is he in the Shajarah?” and pick him in the tree — then the app knows his place.';return}
   $('#uGo').disabled=true;try{const r=await api('/api/people',{method:'POST',body:JSON.stringify({name:n,role:$('#uAdd').checked?'family':'viewer',pid:newPid})});$('#uName').value='';newPid='';$('#uWhoName').textContent='';
     $('#uNew').innerHTML=`Link for <b>${esc(n)}</b> is ready.`;shareLink(r.link,n);showUsers()}
   catch(e){$('#uNew').textContent=e.net?'Needs internet.':'Could not make the link.'}finally{$('#uGo').disabled=false}};
@@ -934,7 +971,7 @@ $('#uList').addEventListener('focusin',e=>{if(e.target.select)e.target.select()}
 const pushOK=()=>'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
 function drawPush(){const b=$('#pushBtn');if(!canWrite){b.hidden=true;return}
   const on=pushOK()&&Notification.permission==='granted'&&!!load('push');b.hidden=on;
-  b.textContent=!pushOK()?'🔔 Notifications: install the app first':Notification.permission==='denied'?'🔔 Notifications are blocked in phone settings':'🔔 Turn on notifications'}
+  b.textContent=!pushOK()?(IOS?'🔔 Notifications: first add Shajarah to the Home Screen (Share → Add to Home Screen) and open it from there':'🔔 Notifications: install the app first'):Notification.permission==='denied'?'🔔 Notifications are blocked in phone settings':'🔔 Turn on notifications'}
 async function enablePush(test){if(!pushOK()){toast(IOS?'On iPhone: add Shajarah to the Home Screen and open it from there, then try again.':'This browser cannot show notifications. Install the app first.',true);return false}
   try{if((await Notification.requestPermission())!=='granted'){drawPush();toast('Notifications were not allowed. You can allow them in the phone settings.',true);return false}
     const k=await api('/api/pushkey'),raw=atob(k.key.replace(/-/g,'+').replace(/_/g,'/')),key=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)key[i]=raw.charCodeAt(i);
